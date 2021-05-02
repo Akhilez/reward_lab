@@ -13,9 +13,9 @@ from omegaconf import DictConfig
 from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
-from app.rl.dqn.action_sampler import ProbabilityActionSampler
-from app.rl.env_recorder import EnvRecorder
-from app.rl.envs.env_wrapper import EnvWrapper, DoneIgnoreBatchedEnvWrapper
+from dqn.action_sampler import ProbabilityActionSampler
+from env_recorder import EnvRecorder
+from envs.env_wrapper import EnvWrapper, DoneIgnoreBatchedEnvWrapper
 from settings import BASE_DIR
 
 
@@ -107,7 +107,6 @@ def train_pg(
 
     cumulative_reward = 0
     cumulative_done = 0
-    stats = []
 
     # ======= Start training ==========
 
