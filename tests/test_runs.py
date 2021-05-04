@@ -11,35 +11,35 @@ from envs.train_sokoban import SokobanV2L0EnvWrapper
 from models import GenericLinearModel
 
 env_cases = [
-    # {
-    #     "env": GridWorldEnvWrapper,  # Custom made env
-    #     "input": 4 * 4 * 4,
-    #     "output": 4,
-    #     "flatten": True,
-    # },
-    # {
-    #     "env": ConnectXEnvWrapper,  # PettingZoo
-    #     "input": 2 * 6 * 7,
-    #     "output": 7,
-    #     "flatten": True,
-    # },
-    # {
-    #     "env": FrozenLakeEnvWrapper,  # OpenAI toy text
-    #     "input": 16,
-    #     "output": 4,
-    # },
-    # {
-    #     "env": MarioEnvWrapper,
-    #     "input": 3 * 42 * 42,
-    #     "output": 12,
-    #     "flatten": True,
-    # },
-    # {
-    #     "env": SokobanV2L0EnvWrapper,  # Griddly
-    #     "input": 5 * 7 * 8,
-    #     "output": 5,
-    #     "flatten": True,
-    # },
+    {
+        "env": GridWorldEnvWrapper,  # Custom made env
+        "input": 4 * 4 * 4,
+        "output": 4,
+        "flatten": True,
+    },
+    {
+        "env": ConnectXEnvWrapper,  # PettingZoo
+        "input": 2 * 6 * 7,
+        "output": 7,
+        "flatten": True,
+    },
+    {
+        "env": FrozenLakeEnvWrapper,  # OpenAI toy text
+        "input": 16,
+        "output": 4,
+    },
+    {
+        "env": MarioEnvWrapper,
+        "input": 3 * 42 * 42,
+        "output": 12,
+        "flatten": True,
+    },
+    {
+        "env": SokobanV2L0EnvWrapper,  # Griddly
+        "input": 5 * 7 * 8,
+        "output": 5,
+        "flatten": True,
+    },
     {
         "env": BreakoutEnvWrapper,  # Atari
         "input": 42 * 42 * 3,
