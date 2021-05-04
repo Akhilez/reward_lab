@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from app.rl.icm.modular_test import ProcessModule, Compose, DataInit, Loop
+from icm.modular_test import ProcessModule, Compose, DataInit, Loop
 
 
 class AppenderModule(ProcessModule):

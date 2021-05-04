@@ -1,11 +1,11 @@
 import gym
 from typing import Iterable
 import torch
-from app.rl.dqn.dqn import train_dqn
-from app.rl.envs.env_wrapper import GymEnvWrapper
+from dqn.dqn import train_dqn
+from envs.env_wrapper import GymEnvWrapper
 from omegaconf import DictConfig
-from app.rl.models import GenericLinearModel
-from lib.nn_utils import to_onehot
+from models import GenericLinearModel
+from libs.nn_utils import to_onehot
 
 
 class TaxiV3EnvWrapper(GymEnvWrapper):

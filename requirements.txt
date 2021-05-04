@@ -1,7 +1,7 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
 
 jupyter==1.0.0
-torch # ==1.8.1+cpu
+torch>=1.8.1
 matplotlib==3.2.2
 tensorflowjs==2.7.0
 tensorboard==2.4.0
@@ -9,7 +9,9 @@ wandb==0.10.24
 moviepy==1.0.3
 hydra-core==1.0.6
 # optuna==2.3.0
-black==21.4b2
+numpy>=1.19.5
+omegaconf>=2.0.6
+scikit-image>=0.18.1
 
 gym==0.18.0
 

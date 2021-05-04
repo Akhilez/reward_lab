@@ -15,11 +15,11 @@ from omegaconf import DictConfig
 from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
-from app.rl.dqn.action_sampler import EpsilonRandomActionSampler
-from app.rl.env_recorder import EnvRecorder
-from app.rl.envs.decay_functions import decay_functions
-from app.rl.envs.env_wrapper import EnvWrapper, BatchEnvWrapper
-from app.rl.prioritized_replay import (
+from dqn.action_sampler import EpsilonRandomActionSampler
+from env_recorder import EnvRecorder
+from envs.decay_functions import decay_functions
+from envs.env_wrapper import EnvWrapper, BatchEnvWrapper
+from prioritized_replay import (
     PrioritizedReplay,
     state_action_reward_state_2_transform,
 )
@@ -164,7 +164,7 @@ def step_with_replay(env, actions_live, actions_replay, states2_replay, rewards_
     rewards_live, dones_live = transform_step_data(*env.step(actions_live))
 
     states2 = _combine(env.get_state_batch(), states2_replay)
-    actions = _combine(actions_live, actions_replay)
+    actions = _combine(torch.tensor(actions_live), actions_replay)
     rewards = _combine(rewards_live, rewards_replay)
 
     return states2, actions, rewards, dones_live

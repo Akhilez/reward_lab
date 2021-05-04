@@ -11,7 +11,7 @@ from skimage.transform import resize
 from torch import nn
 from torch.nn import functional as F
 
-from lib.nn_utils import to_onehot
+from libs.nn_utils import to_onehot
 
 
 class MarioModel(nn.Module):

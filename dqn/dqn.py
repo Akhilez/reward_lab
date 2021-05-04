@@ -6,9 +6,9 @@ from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
 
-from app.rl.dqn.action_sampler import EpsilonRandomActionSampler
-from app.rl.env_recorder import EnvRecorder
-from app.rl.envs.env_wrapper import EnvWrapper, BatchEnvWrapper
+from dqn.action_sampler import EpsilonRandomActionSampler
+from env_recorder import EnvRecorder
+from envs.env_wrapper import EnvWrapper, BatchEnvWrapper
 from settings import BASE_DIR
 
 

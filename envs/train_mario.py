@@ -6,11 +6,10 @@ from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 from omegaconf import DictConfig
 from torch import nn
-from app.rl.dqn.dqn import train_dqn
-from app.rl.envs.env_wrapper import (
+from dqn.dqn import train_dqn
+from envs.env_wrapper import (
     TensorStateMixin,
     GymEnvWrapper,
-    TimeOutLostMixin,
     timeout_lost,
     step_incrementer,
     reset_incrementer,

@@ -4,8 +4,8 @@ from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 from omegaconf import DictConfig
 
-from app.rl.icm.mario import MarioModel, MarioICM, ExperienceReplay
-from app.rl.icm.modular_test import Compose, DataInit, ProcessModule, Loop
+from icm.mario import MarioModel, MarioICM, ExperienceReplay
+from icm.modular_test import Compose, DataInit, ProcessModule, Loop
 
 hp = {
     "steps": 1,

@@ -1,12 +1,12 @@
 from omegaconf import DictConfig
 from pettingzoo.classic import tictactoe_v3
-from app.rl.dqn.dqn import train_dqn
-from app.rl.envs.env_wrapper import (
+from dqn.dqn import train_dqn
+from envs.env_wrapper import (
     PettingZooEnvWrapper,
     NumpyStateMixin,
     petting_zoo_random_player,
 )
-from app.rl.models import GenericLinearModel
+from models import GenericLinearModel
 from settings import device
 
 

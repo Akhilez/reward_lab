@@ -11,14 +11,14 @@ from omegaconf import DictConfig
 from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
-from app.rl.env_recorder import EnvRecorder
-from app.rl.envs.env_wrapper import EnvWrapper, BatchEnvWrapper
-from app.rl.prioritized_replay import (
+from env_recorder import EnvRecorder
+from envs.env_wrapper import EnvWrapper, BatchEnvWrapper
+from prioritized_replay import (
     PrioritizedReplay,
     state_action_reward_state_2_transform,
 )
 from settings import BASE_DIR
-from app.rl.dqn.action_sampler import EpsilonRandomActionSampler
+from dqn.action_sampler import EpsilonRandomActionSampler
 
 
 def train_dqn_per(

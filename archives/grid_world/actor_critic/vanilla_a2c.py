@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from gym_grid_world.envs import GridWorldEnv
-from lib.nn_utils import save_model
+from libs.nn_utils import save_model
 from settings import BASE_DIR, device
 
 

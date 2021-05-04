@@ -4,9 +4,9 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 import numpy as np
 
-from app.rl.grid_world.PrioritizedReplay import PrioritizedReplay
-from app.rl.grid_world.gw_pg import GWPgModel
-from app.rl.grid_world.utils import state_to_dict
+from grid_world.PrioritizedReplay import PrioritizedReplay
+from grid_world.gw_pg import GWPgModel
+from grid_world.utils import state_to_dict
 from settings import BASE_DIR, device
 
 CWD = f"{BASE_DIR}/app/rl/grid_world/q_learning"

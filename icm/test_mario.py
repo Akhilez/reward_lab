@@ -5,7 +5,7 @@ import torch
 from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 
-from app.rl.icm.mario import downscale_obs, prepare_state, to_onehot
+from icm.mario import downscale_obs, prepare_state, to_onehot
 
 
 class TestMario(TestCase):

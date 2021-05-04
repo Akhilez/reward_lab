@@ -1,11 +1,11 @@
 from unittest import TestCase, mock
 from unittest.mock import Mock
 import torch
-from app.rl.dqn import utils
+from dqn import utils
 
 
 class TestUtils(TestCase):
-    @mock.patch("app.rl.dqn.utils.torch.rand", return_value=1)
+    @mock.patch("dqn.utils.torch.rand", return_value=1)
     def test_sample_action_exploit(self, *_):
         q_values = torch.tensor([1, 6, 3]).float()
         valid_actions = [0, 2]
@@ -16,8 +16,8 @@ class TestUtils(TestCase):
 
         self.assertEqual(sampled_action, expected_action)
 
-    @mock.patch("app.rl.dqn.utils.torch.rand", return_value=0)
-    @mock.patch("app.rl.dqn.utils.torch.randint", return_value=0)
+    @mock.patch("dqn.utils.torch.rand", return_value=0)
+    @mock.patch("dqn.utils.torch.randint", return_value=0)
     def test_sample_action_explore(self, *_):
         q_values = torch.tensor([1, 6, 3]).float()
         valid_actions = [0, 2]

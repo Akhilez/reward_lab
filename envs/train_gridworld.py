@@ -1,15 +1,15 @@
 from omegaconf import DictConfig
-from app.rl.dqn.dqn import train_dqn
-from app.rl.dqn.dqn_double import train_dqn_double
-from app.rl.dqn.dqn_e_decay import train_dqn_e_decay
-from app.rl.dqn.dqn_per import train_dqn_per
-from app.rl.dqn.dqn_target import train_dqn_target
-from app.rl.dqn.pg import train_pg
-from app.rl.envs import decay_functions
-from app.rl.envs.env_wrapper import GymEnvWrapper, NumpyStateMixin, TimeOutLostMixin
-from app.rl.models import GenericConvModel
+from dqn.dqn import train_dqn
+from dqn.dqn_double import train_dqn_double
+from dqn.dqn_e_decay import train_dqn_e_decay
+from dqn.dqn_per import train_dqn_per
+from dqn.dqn_target import train_dqn_target
+from dqn.pg import train_pg
+from envs import decay_functions
+from envs.env_wrapper import GymEnvWrapper, NumpyStateMixin, TimeOutLostMixin
+from models import GenericConvModel
 from gym_grid_world.envs import GridWorldEnv
-from utils import device
+from settings import device
 
 
 class GridWorldEnvWrapper(TimeOutLostMixin, NumpyStateMixin, GymEnvWrapper):

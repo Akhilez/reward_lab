@@ -4,10 +4,10 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from copy import deepcopy
 
-from app.rl.archives.grid_world.PrioritizedReplay import PrioritizedReplay
-from app.rl.archives.grid_world.gw_pg import GWPgModel
-from app.rl.archives.grid_world.utils import state_to_dict
-from lib.nn_utils import save_model
+from archives.grid_world.PrioritizedReplay import PrioritizedReplay
+from archives.grid_world.gw_pg import GWPgModel
+from archives.grid_world.utils import state_to_dict
+from libs.nn_utils import save_model
 from settings import BASE_DIR, device
 
 CWD = f"{BASE_DIR}/app/rl/grid_world/q_learning"

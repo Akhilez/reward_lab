@@ -8,10 +8,10 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.tensorboard import SummaryWriter
 
-from app.rl.grid_world.PrioritizedReplay import PrioritizedReplay
-from app.rl.grid_world.gw_pg import GWPgModel
+from grid_world.PrioritizedReplay import PrioritizedReplay
+from grid_world.gw_pg import GWPgModel
 from gym_grid_world.envs.grid_world_env import GridWorldEnv
-from lib.nn_utils import save_model
+from libs.nn_utils import save_model
 from settings import BASE_DIR, device
 
 

@@ -2,50 +2,57 @@ from unittest import TestCase, mock
 
 from omegaconf import DictConfig
 
-from app.rl.envs.train_connect_x import ConnectXEnvWrapper
-from app.rl.envs.train_frozen_lake import FrozenLakeEnvWrapper
-from app.rl.envs.train_gridworld import GridWorldEnvWrapper
-from app.rl.envs.train_mario import MarioEnvWrapper
-from app.rl.envs.train_sokoban import SokobanV2L0EnvWrapper
-from app.rl.models import GenericLinearModel
+from envs.train_breakout import BreakoutEnvWrapper
+from envs.train_connect_x import ConnectXEnvWrapper
+from envs.train_frozen_lake import FrozenLakeEnvWrapper
+from envs.train_gridworld import GridWorldEnvWrapper
+from envs.train_mario import MarioEnvWrapper
+from envs.train_sokoban import SokobanV2L0EnvWrapper
+from models import GenericLinearModel
 
 env_cases = [
+    # {
+    #     "env": GridWorldEnvWrapper,  # Custom made env
+    #     "input": 4 * 4 * 4,
+    #     "output": 4,
+    #     "flatten": True,
+    # },
+    # {
+    #     "env": ConnectXEnvWrapper,  # PettingZoo
+    #     "input": 2 * 6 * 7,
+    #     "output": 7,
+    #     "flatten": True,
+    # },
+    # {
+    #     "env": FrozenLakeEnvWrapper,  # OpenAI toy text
+    #     "input": 16,
+    #     "output": 4,
+    # },
+    # {
+    #     "env": MarioEnvWrapper,
+    #     "input": 3 * 42 * 42,
+    #     "output": 12,
+    #     "flatten": True,
+    # },
+    # {
+    #     "env": SokobanV2L0EnvWrapper,  # Griddly
+    #     "input": 5 * 7 * 8,
+    #     "output": 5,
+    #     "flatten": True,
+    # },
     {
-        "env": GridWorldEnvWrapper,  # Custom made env
-        "input": 4 * 4 * 4,
+        "env": BreakoutEnvWrapper,  # Atari
+        "input": 42 * 42 * 3,
         "output": 4,
-        "flatten": True,
-    },
-    {
-        "env": ConnectXEnvWrapper,  # PettingZoo
-        "input": 2 * 6 * 7,
-        "output": 7,
-        "flatten": True,
-    },
-    {
-        "env": FrozenLakeEnvWrapper,  # OpenAI toy text
-        "input": 16,
-        "output": 4,
-    },
-    {
-        "env": MarioEnvWrapper,
-        "input": 3 * 42 * 42,
-        "output": 12,
-        "flatten": True,
-    },
-    {
-        "env": SokobanV2L0EnvWrapper,  # Griddly
-        "input": 5 * 7 * 8,
-        "output": 5,
         "flatten": True,
     },
 ]
 
 
 class TestRuns(TestCase):
-    @mock.patch("app.rl.dqn.dqn.wandb")
+    @mock.patch("dqn.dqn.wandb")
     def test_dqn_vanilla(self, *_):
-        from app.rl.dqn.dqn import train_dqn
+        from dqn.dqn import train_dqn
 
         hp = DictConfig({})
 
@@ -73,9 +80,9 @@ class TestRuns(TestCase):
 
             train_dqn(case["env"], model, hp)
 
-    @mock.patch("app.rl.dqn.pg.wandb")
+    @mock.patch("dqn.pg.wandb")
     def test_pg(self, *_):
-        from app.rl.dqn.pg import train_pg
+        from dqn.pg import train_pg
 
         hp = DictConfig({})
 
