@@ -18,12 +18,17 @@ from envs.env_wrapper import EnvWrapper, DoneIgnoreBatchedEnvWrapper
 from settings import BASE_DIR
 
 
+class A2CStats:
+    def __init__(self):
+        self.rewards = []
+
+
 def train_a2c_mc(
-        env_class: Type[EnvWrapper],
-        model: nn.Module,
-        config: DictConfig,
-        project_name=None,
-        run_name=None,
+    env_class: Type[EnvWrapper],
+    model: nn.Module,
+    config: DictConfig,
+    project_name=None,
+    run_name=None,
 ):
     env = DoneIgnoreBatchedEnvWrapper(env_class, config.batch_size)
     optim = torch.optim.Adam(model.parameters(), lr=config.lr)
@@ -48,7 +53,7 @@ def train_a2c_mc(
     # ======= Start training ==========
 
     for episode in range(config.episodes):
-        stats = Stats(config.batch_size)  # Stores (reward, policy prob)
+        stats = A2CStats(config.batch_size)  # Stores (reward, policy prob)
         step = 0
         env.reset()
 
