@@ -91,3 +91,26 @@ class GenericConvModel(nn.Module):
         for hidden in self.linear_layers:
             x = hidden(x)
         return self.out(x)
+
+
+class GenericMultiHeadLinearModel(GenericLinearModel):
+    def __init__(
+        self, in_size: int, units: List[int], outs: List[int], flatten: bool = False
+    ):
+        self.outs = outs
+        super(GenericMultiHeadLinearModel, self).__init__(
+            in_size, units, out_size=sum(self.outs), flatten=flatten
+        )
+
+    def forward(self, x):
+        x = super().forward(x)
+        output = []
+        start = 0
+
+        for i in self.outs:
+            end = start + i
+            head_tensor = x[:, start:end]
+
+            output.append(head_tensor)
+
+        return output
