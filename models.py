@@ -41,12 +41,13 @@ class GenericConvModel(nn.Module):
         width: int,
         in_channels: int,
         channels: List[int],
+        linear_units: List[int],
         out_size: int,
     ):
         super().__init__()
 
         self.first = nn.Sequential(
-            nn.Conv2d(in_channels, channels[0], kernel_size=3, padding=1),
+            nn.Conv2d(in_channels, channels[0], kernel_size=(3, 3), padding=(1, 1)),
             nn.ReLU(),
             nn.Dropout(0.3),
         )
@@ -54,7 +55,9 @@ class GenericConvModel(nn.Module):
         self.hidden = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(channels[i], channels[i + 1], kernel_size=3, padding=1),
+                    nn.Conv2d(
+                        channels[i], channels[i + 1], kernel_size=(3, 3), padding=(1, 1)
+                    ),
                     nn.ReLU(),
                     nn.Dropout(0.3),
                 )
@@ -62,11 +65,29 @@ class GenericConvModel(nn.Module):
             ]
         )
 
-        self.out = nn.Linear(channels[-1] * height * width, out_size)
+        self.linear_start = self.out = nn.Sequential(
+            nn.Linear(channels[-1] * height * width, linear_units[0]),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+        )
+        self.linear_layers = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(linear_units[i], linear_units[i + 1]),
+                    nn.ReLU(),
+                    nn.Dropout(0.3),
+                )
+                for i in range(len(linear_units) - 1)
+            ]
+        )
+        self.out = nn.Linear(linear_units[-1], out_size)
 
     def forward(self, x):
         x = self.first(x)
         for hidden in self.hidden:
             x = hidden(x)
         x = x.flatten(1)
+        x = self.linear_start(x)
+        for hidden in self.linear_layers:
+            x = hidden(x)
         return self.out(x)
