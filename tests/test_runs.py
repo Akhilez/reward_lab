@@ -8,7 +8,7 @@ from envs.train_frozen_lake import FrozenLakeEnvWrapper
 from envs.train_gridworld import GridWorldEnvWrapper
 from envs.train_mario import MarioEnvWrapper
 from envs.train_sokoban import SokobanV2L0EnvWrapper
-from models import GenericLinearModel
+from libs.models import GenericLinearModel
 
 env_cases = [
     {

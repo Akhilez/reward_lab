@@ -2,7 +2,7 @@ from unittest import TestCase
 
 import numpy as np
 
-from prioritized_replay import PrioritizedReplay
+from libs.prioritized_replay import PrioritizedReplay
 
 
 class TestPrioritizedReplay(TestCase):

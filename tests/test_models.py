@@ -1,6 +1,6 @@
 from unittest import TestCase
 import torch
-from models import GenericMultiHeadLinearModel
+from libs.models import GenericMultiHeadLinearModel
 
 
 class TestModels(TestCase):
