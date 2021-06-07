@@ -1,7 +1,7 @@
 from copy import deepcopy
 from typing import List
 import numpy as np
-from envs.env_wrapper import EnvWrapper
+from libs.env_wrapper import EnvWrapper
 import logging
 
 log = logging.getLogger(__name__)

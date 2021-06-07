@@ -16,10 +16,10 @@ from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
 from dqn.action_sampler import EpsilonRandomActionSampler
-from env_recorder import EnvRecorder
-from envs.decay_functions import decay_functions
-from envs.env_wrapper import EnvWrapper, BatchEnvWrapper
-from prioritized_replay import (
+from libs.env_recorder import EnvRecorder
+from libs.decay_functions import decay_functions
+from libs.env_wrapper import EnvWrapper, BatchEnvWrapper
+from libs.prioritized_replay import (
     PrioritizedReplay,
     state_action_reward_state_2_transform,
 )

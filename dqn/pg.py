@@ -14,10 +14,10 @@ from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
 from dqn.action_sampler import ProbabilityActionSampler
-from env_recorder import EnvRecorder
-from envs.env_wrapper import EnvWrapper, DoneIgnoreBatchedEnvWrapper
+from libs.env_recorder import EnvRecorder
+from libs.env_wrapper import EnvWrapper, DoneIgnoreBatchedEnvWrapper
 from settings import BASE_DIR
-from stats import PGStats
+from libs.stats import PGStats
 
 
 def train_pg(

@@ -5,9 +5,9 @@ from dqn.dqn_e_decay import train_dqn_e_decay
 from dqn.dqn_per import train_dqn_per
 from dqn.dqn_target import train_dqn_target
 from dqn.pg import train_pg
-from envs import decay_functions
-from envs.env_wrapper import GymEnvWrapper, NumpyStateMixin, TimeOutLostMixin
-from models import GenericConvModel
+from libs import decay_functions
+from libs.env_wrapper import GymEnvWrapper, NumpyStateMixin, TimeOutLostMixin
+from libs.models import GenericConvModel
 from gym_grid_world.envs import GridWorldEnv
 from settings import device
 
