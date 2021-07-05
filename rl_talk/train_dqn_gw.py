@@ -4,7 +4,7 @@ from torch.optim import Adam
 from envs.train_gridworld import GridWorldEnvWrapper
 
 env = GridWorldEnvWrapper()
-state = env.reset()  # state shape: (4, 4, 4)
+state = env.reset()
 
 model = nn.Sequential(
     nn.Linear(4 * 4 * 4, 100),
@@ -26,14 +26,13 @@ while True:
 
     with torch.no_grad():
         qs2 = model(torch.FloatTensor([state.flatten()]))[0]
-
     target = reward + 0.9 * qs2.amax()
+
     loss = (target - qs[action]) ** 2
 
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
 
-    print(loss.item())
     if is_done:
         break

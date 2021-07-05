@@ -287,12 +287,7 @@ def train():
             print("in reward", intrinsic_reward.item())
             print("ex reward", reward)
 
-            if cfg.use_extrinsic:
-                reward = (cfg.intrinsic_weight * intrinsic_reward) + (
-                    cfg.extrinsic_weight * reward
-                )
-            else:
-                reward = intrinsic_reward
+            reward = (cfg.intrinsic_weight * intrinsic_reward) + (cfg.extrinsic_weight * reward)
 
             q_loss = get_q_loss(
                 q_values[0][action], reward, q_model, state2, cfg.gamma_q
