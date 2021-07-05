@@ -28,7 +28,7 @@ model = nn.Sequential(
 optimizer = Adam(model.parameters())
 
 for episode in range(10000):
-    state = env.reset()  # state shape: (4, 4, 4)
+    state = env.reset()
 
     rewards = []
     probabilities = []
