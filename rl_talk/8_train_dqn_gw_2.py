@@ -1,3 +1,4 @@
+from copy import deepcopy
 import numpy as np
 import torch
 from omegaconf import DictConfig
@@ -7,6 +8,13 @@ from envs.train_gridworld import GridWorldEnvWrapper
 import wandb
 from datetime import datetime
 from settings import BASE_DIR
+
+
+def _format_video(video):
+    video = np.array(video)
+    video = np.moveaxis(video, -1, 1)
+    return video
+
 
 wandb.init(
     name=f"gw_dqn_{str(datetime.now().timestamp())[5:10]}",
@@ -31,6 +39,8 @@ cumulative_reward = 0
 for episode in range(15000):
     state = env.reset()
     rewards = []
+    video_buffer = []
+    must_record = episode % 1000 == 0
     while True:
         state = torch.FloatTensor([state.flatten()])
         qs = model(state)[0]
@@ -59,9 +69,14 @@ for episode in range(15000):
         log.cumulative_reward = cumulative_reward
 
         rewards.append(reward)
+        if must_record:
+            video_buffer.append(deepcopy(env.render("rgb_array")))
         if is_done:
             log.ep_mean_reward = float(np.mean(rewards))
             log.ep_length = len(rewards)
+            if must_record:
+                log = dict(log)
+                log[f"video_ep{episode}_reward{reward}"] = wandb.Video(_format_video(video_buffer), fps=4, format="gif")
 
         wandb.log(log)
 
