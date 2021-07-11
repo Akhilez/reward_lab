@@ -13,4 +13,3 @@ while True:
 
     if is_done:
         break
-
