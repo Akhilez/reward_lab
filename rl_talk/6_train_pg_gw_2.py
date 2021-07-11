@@ -43,8 +43,9 @@ for episode in range(10000):
     probabilities = []
     video_buffer = []
     must_record = episode % 1000 == 0
+    is_done = False
 
-    while True:
+    while not is_done:
         state = torch.FloatTensor([state.flatten()])
         prob = model(state)
         prob = torch.softmax(prob, dim=1)
@@ -56,9 +57,6 @@ for episode in range(10000):
         probabilities.append(prob[0][action])
         if must_record:
             video_buffer.append(deepcopy(env.render("rgb_array")))
-
-        if is_done:
-            break
 
     rewards = torch.FloatTensor(rewards)
     probabilities = torch.stack(probabilities)

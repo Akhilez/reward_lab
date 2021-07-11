@@ -18,12 +18,10 @@ env = gym.make(
 
 env.reset()
 render(env)
+is_done = False
 
-while True:
+while not is_done:
     action = env.action_space.sample()
     state, reward, is_done, info = env.step(action)
     print(f'{action=}, {reward=}')
     render(env)
-
-    if is_done:
-        break

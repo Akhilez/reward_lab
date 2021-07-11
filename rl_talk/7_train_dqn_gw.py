@@ -5,6 +5,7 @@ from envs.train_gridworld import GridWorldEnvWrapper
 
 env = GridWorldEnvWrapper()
 state = env.reset()
+is_done = False
 
 model = nn.Sequential(
     nn.Linear(4 * 4 * 4, 100),
@@ -13,7 +14,7 @@ model = nn.Sequential(
 )
 optimizer = Adam(model.parameters())
 
-while True:
+while not is_done:
     state = torch.FloatTensor([state.flatten()])
     qs = model(state)[0]
 
@@ -33,6 +34,3 @@ while True:
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-
-    if is_done:
-        break

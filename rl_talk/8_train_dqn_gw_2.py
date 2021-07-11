@@ -41,7 +41,9 @@ for episode in range(15000):
     rewards = []
     video_buffer = []
     must_record = episode % 1000 == 0
-    while True:
+    is_done = False
+
+    while not is_done:
         state = torch.FloatTensor([state.flatten()])
         qs = model(state)[0]
 
@@ -79,6 +81,3 @@ for episode in range(15000):
                 log[f"video_ep{episode}_reward{reward}"] = wandb.Video(_format_video(video_buffer), fps=4, format="gif")
 
         wandb.log(log)
-
-        if is_done:
-            break
