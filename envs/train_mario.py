@@ -7,7 +7,7 @@ from nes_py.wrappers import JoypadSpace
 from omegaconf import DictConfig
 from torch import nn
 from dqn.dqn import train_dqn
-from envs.env_wrapper import (
+from libs.env_wrapper import (
     TensorStateMixin,
     GymEnvWrapper,
     timeout_lost,
