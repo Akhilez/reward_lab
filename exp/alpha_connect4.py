@@ -21,15 +21,61 @@ hp = DictConfig(
         lr=1e-3,
         weight_decay=1e-4,
         lambda_mcts_selection=1,
+        model_depth=8,
+        model_width=128,
     )
 )
 
 
 class AlphaConnect4Model(nn.Module):
-    pass
+    def __init__(self, width, depth):
+        super().__init__()
+        self.conv_block = nn.Sequential(
+            nn.Conv2d(2, width, kernel_size=(3, 3), stride=1, padding=1),
+            nn.BatchNorm2d(width),
+            nn.ReLU(),
+        )
+        self.residual_stack = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(width, width, kernel_size=(3, 3), stride=1, padding=1),
+                nn.BatchNorm2d(width),
+                nn.ReLU(),
+                nn.Conv2d(width, width, kernel_size=(3, 3), stride=1, padding=1),
+                nn.BatchNorm2d(width),
+            )
+            for _ in range(depth)
+        ])
+        self.policy_head = nn.Sequential(
+            nn.Conv2d(width, 2, kernel_size=(1, 1), stride=1, padding=0),
+            nn.BatchNorm2d(2),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(6 * 7 * 2, 7),
+        )
+        self.value_head = nn.Sequential(
+            nn.Conv2d(width, 1, kernel_size=(1, 1), stride=1, padding=0),
+            nn.BatchNorm2d(1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(6 * 7 * 1, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Tanh(),
+        )
+
+    def forward(self, s):
+        features = self.conv_block(s)
+        for residual_block in self.residual_stack:
+            inputs = features
+            features = residual_block(features)
+            features = features + inputs
+            features = F.relu(features)
+        policy = self.policy_head(features)
+        value = self.value_head(features)
+        return policy, value
 
 
-model = AlphaConnect4Model()
+model = AlphaConnect4Model(hp.model_width, hp.model_depth)
 optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
 best_model: AlphaConnect4Model = deepcopy(model)  # TODO: Implement best model
 tree: Dict[tuple, Any] = dict()
@@ -118,8 +164,9 @@ class AlphaConnect4Dataset(Dataset):
 
     def __getitem__(self, index):
         tup = self.tuples[index]
+        state = np.moveaxis(tup["state"], -1, 0)  # (6, 7, 2) --> (2, 6, 7)
         return (
-            tup["state"],
+            state,
             (
                 tup["mcts_probabilities"],
                 tup["final_reward"],
