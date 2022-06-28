@@ -1,6 +1,5 @@
 from collections import Counter
 from copy import deepcopy
-from math import exp
 from typing import List, Set, Any, Dict, Optional
 import numpy as np
 import torch
@@ -12,14 +11,15 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
 from datetime import datetime
 import wandb
+from tqdm import tqdm
 
 hp = DictConfig(
     dict(
         train_iterations=100,
-        n_games=10,
+        n_games=20,
         mcts_sims=10,
-        epochs=2,
-        batch_size=8,
+        epochs=20,
+        batch_size=64,
         dirichlet_e=0.25,
         dirichlet_alpha=0.3,
         lr=1e-3,
@@ -28,7 +28,7 @@ hp = DictConfig(
         model_depth=8,
         model_width=128,
         wandb=dict(
-            mode="disabled",
+            mode="online",
             project="AlphaZeroConnect4",
             name="azc_" + datetime.now().strftime("%-d%H%M%S"),
         ),
@@ -97,7 +97,7 @@ temperature = 1
 env = connect_four_v3.env()
 wandb.init(
     name=hp.wandb.name,
-    # dir=cfg.output_path,
+    dir='../_wandb',
     config=OmegaConf.to_object(hp),
     tags=[],
     allow_val_change=True,
@@ -111,9 +111,10 @@ wandb.init(
 class Node:
     def __init__(self, env):
         self.parents: Set[Node] = set()
-        self.children: List[Node] = []
+        self.children: List[Optional[Node]] = []
         self.env = deepcopy(env)
-        self.action_mask = self.env.observation(self.env.agent_selection)["action_mask"]
+        self.s = np.array(self.env.unwrapped.board).reshape(6, 7)
+        self.action_mask = self.env.observe(self.env.agent_selection)["action_mask"]
         self.p: Optional[np.ndarray] = None
         self.v_sum: float = 0.0
         self.n: np.ndarray = np.zeros((len(self.action_mask),))
@@ -123,27 +124,31 @@ class Node:
             leaf = self.select()
             leaf.expand()
             value = leaf.evaluate()
-            self.backup(value)
+            leaf.backup(value)
 
     def select(self) -> "Node":
         if len(self.children) == 0:
             return self
 
-        q = self.v_sum / self.n
+        q = self.v_sum / (1 + self.n)
         u = self.p / (1 + self.n)
 
-        i = (q + hp.lambda_mcts_selection * u).argmax()
+        selection_scores = (q + hp.lambda_mcts_selection * u)
+        selection_scores = torch.softmax(torch.from_numpy(selection_scores), 0).numpy()
+        selection_scores *= self.action_mask
+
+        i = selection_scores.argmax()
         return self.children[i].select()
 
     def expand(self):
-        if self.action_mask.sum() == 0:  # No actions to perform.
-            return
-
         if self.env.dones[self.env.agent_selection]:
             return
 
         n_actions = len(self.action_mask)
         for action in range(n_actions):
+            if self.action_mask[action] == 0:  # illegal action
+                self.children.append(None)
+                continue
             env = deepcopy(self.env)
             env.step(action)
             state = tuple(env.unwrapped.board)
@@ -158,12 +163,12 @@ class Node:
         if len(self.children) == 0:
             return self.env.rewards[self.env.agent_selection]
 
-        observation = self.env.observation(self.env.agent_selection)
-        state = torch.from_numpy(observation["observation"]).unsqueeze(0)
+        observation = self.env.observe(self.env.agent_selection)
+        state = torch.from_numpy(np.moveaxis(observation["observation"], -1, 0)).unsqueeze(0).float()
         model.eval()
         with torch.no_grad():
             pred_prob, pred_value = model(state)
-        self.p = pred_prob[0].numpy()
+        self.p = torch.softmax(pred_prob[0], 0).numpy()
         return pred_value.squeeze().item()
 
     def backup(self, value: float):
@@ -180,7 +185,12 @@ class Node:
         return probs
 
     def __eq__(self, other):
+        if other is None:
+            return False
         return self.env.unwrapped.board == other.env.unwrapped.board
+
+    def __hash__(self):
+        return hash(tuple(self.env.unwrapped.board))
 
 
 class AlphaConnect4Dataset(Dataset):
@@ -189,12 +199,12 @@ class AlphaConnect4Dataset(Dataset):
 
     def __getitem__(self, index):
         tup = self.tuples[index]
-        state = np.moveaxis(tup["state"], -1, 0)  # (6, 7, 2) --> (2, 6, 7)
+        state = np.moveaxis(tup["state"], -1, 0).astype(np.float32)  # (6, 7, 2) --> (2, 6, 7)
         return (
             state,
             (
-                tup["mcts_probabilities"],
-                tup["final_reward"],
+                tup["mcts_probabilities"].astype(np.float32),
+                np.float32(tup["final_reward"]),
             ),
         )
 
@@ -205,7 +215,7 @@ class AlphaConnect4Dataset(Dataset):
 for i_train in range(hp.train_iterations):
     # ----- GAME DATA GENERATION ------
     tuples_global = []
-    for i_game in range(hp.n_games):
+    for i_game in tqdm(range(hp.n_games), desc="Generating training data"):
         # Play the game using MCTS and NN, store the tuple for training.
         # Each tuple will have (s, pie, z)
 
@@ -257,6 +267,7 @@ for i_train in range(hp.train_iterations):
                     "game_length": len(tuples_game),
                     "reward_player_0": env.rewards["player_0"],
                     "reward_player_1": env.rewards["player_1"],
+                    "last_frame": wandb.Image(np.array(env.unwrapped.board).reshape(6, 7) * 125)
                 },
                 **{f"action_count_{a}": count for a, count in actions_counter.items()},
             }
@@ -270,15 +281,16 @@ for i_train in range(hp.train_iterations):
     )
 
     model.train()
-    for epoch in hp.epochs:
+    for epoch in tqdm(range(hp.epochs), desc="Training"):
         losses_sum, n_batches = 0, 0
         for states, (mcts_probs, final_rewards) in dataloader:
             pred_probs, pred_values = model(states)
 
             # l = (z - v)^2 - pie.T * log(p)
-            loss = F.mse_loss(pred_values, final_rewards) - mcts_probs @ torch.log(
-                pred_probs
-            )
+            loss_policy = - mcts_probs.T @ torch.log(torch.softmax(pred_probs, 1))
+            loss_policy = loss_policy.sum()
+            loss_value = F.mse_loss(pred_values.squeeze(), final_rewards)
+            loss = loss_value + loss_policy
 
             optimizer.zero_grad()
             loss.backward()
@@ -295,27 +307,30 @@ for i_train in range(hp.train_iterations):
 
     # ---- EVAL ----
 
-    old_model = best_model
-    new_model = model
+    win_rate = 0
     for i_game in range(hp.n_eval_games):
         env.reset()
         tree.clear()
         tree[tuple(env.unwrapped.board)] = Node(env)
-        if np.random.choice([True, False]):
-            p1 = old_model
-            p2 = new_model
-        else:
-            p2 = old_model
-            p1 = new_model
+
+        player = np.random.choice(['player_0', 'player_1'])
+
         while not any(env.dones.values()):
-            model = p1 if env.agent_selection == 'player_0' else p2
-            
+            if env.agent_selection == player:
+                state = tuple(env.unwrapped.board)
+                node = tree.get(state)
+                if node is None:
+                    node = tree.setdefault(state, Node(env))
+                node.run_simulations(hp.mcts_sims)
+                mcts_probabilities = node.get_probabilities()
+                action = mcts_probabilities.argmax()
+            else:
+                obs = env.observe(env.agent_selection)
+                action = np.random.choice(obs['action_mask'].nonzero()[0])
 
+            env.step(action)
 
-
-
-
-    win_rate = 0.55  # TODO: Implement evaluation.
+        win_rate += env.rewards[player]
 
     # TODO: I don't get the concept of temperature fully.
     # temperature = exp(- (i_train + 1) * hp.temperature_decay_rate)
