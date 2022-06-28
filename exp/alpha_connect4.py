@@ -1,13 +1,17 @@
+from collections import Counter
 from copy import deepcopy
+from math import exp
 from typing import List, Set, Any, Dict, Optional
 import numpy as np
 import torch
 from pettingzoo.classic import connect_four_v3
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.nn import functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
+from datetime import datetime
+import wandb
 
 hp = DictConfig(
     dict(
@@ -23,6 +27,14 @@ hp = DictConfig(
         lambda_mcts_selection=1,
         model_depth=8,
         model_width=128,
+        wandb=dict(
+            mode="disabled",
+            project="AlphaZeroConnect4",
+            name="azc_" + datetime.now().strftime("%-d%H%M%S"),
+        ),
+        n_eval_games=10,
+        min_win_rate=0.55,
+        temperature_decay_rate=0.1,
     )
 )
 
@@ -35,16 +47,18 @@ class AlphaConnect4Model(nn.Module):
             nn.BatchNorm2d(width),
             nn.ReLU(),
         )
-        self.residual_stack = nn.ModuleList([
-            nn.Sequential(
-                nn.Conv2d(width, width, kernel_size=(3, 3), stride=1, padding=1),
-                nn.BatchNorm2d(width),
-                nn.ReLU(),
-                nn.Conv2d(width, width, kernel_size=(3, 3), stride=1, padding=1),
-                nn.BatchNorm2d(width),
-            )
-            for _ in range(depth)
-        ])
+        self.residual_stack = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(width, width, kernel_size=(3, 3), stride=1, padding=1),
+                    nn.BatchNorm2d(width),
+                    nn.ReLU(),
+                    nn.Conv2d(width, width, kernel_size=(3, 3), stride=1, padding=1),
+                    nn.BatchNorm2d(width),
+                )
+                for _ in range(depth)
+            ]
+        )
         self.policy_head = nn.Sequential(
             nn.Conv2d(width, 2, kernel_size=(1, 1), stride=1, padding=0),
             nn.BatchNorm2d(2),
@@ -79,7 +93,19 @@ model = AlphaConnect4Model(hp.model_width, hp.model_depth)
 optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
 best_model: AlphaConnect4Model = deepcopy(model)  # TODO: Implement best model
 tree: Dict[tuple, Any] = dict()
+temperature = 1
 env = connect_four_v3.env()
+wandb.init(
+    name=hp.wandb.name,
+    # dir=cfg.output_path,
+    config=OmegaConf.to_object(hp),
+    tags=[],
+    allow_val_change=True,
+    save_code=True,
+    project=hp.wandb.project,
+    mode=hp.wandb.mode,
+    # group=hp.wandb.group,
+)
 
 
 class Node:
@@ -148,7 +174,6 @@ class Node:
             parent.backup(value)
 
     def get_probabilities(self) -> np.ndarray:
-        temperature = 1  # TODO: Reduce temperature with iterations.
         probs = self.n ** (1 / temperature)
         probs = probs * self.action_mask
         probs = probs / probs.sum()
@@ -178,8 +203,8 @@ class AlphaConnect4Dataset(Dataset):
 
 
 for i_train in range(hp.train_iterations):
+    # ----- GAME DATA GENERATION ------
     tuples_global = []
-
     for i_game in range(hp.n_games):
         # Play the game using MCTS and NN, store the tuple for training.
         # Each tuple will have (s, pie, z)
@@ -188,31 +213,35 @@ for i_train in range(hp.train_iterations):
         tree.clear()
         tree[tuple(env.unwrapped.board)] = Node(env)
         tuples_game = []
+        actions_counter = Counter()
         while not any(env.dones.values()):
             node = tree[tuple(env.unwrapped.board)]
             node.run_simulations(hp.mcts_sims)
             mcts_probabilities = node.get_probabilities()
 
             observation = env.observe(env.agent_selection)
-            state = observation["observation"]
             action_mask = observation["action_mask"]
 
             # Sample action from mcts_probabilities and action_mask
             legal_actions = action_mask.nonzero()[0]
             legal_probs = mcts_probabilities[legal_actions]
             dir_noise = np.random.dirichlet([hp.dirichlet_alpha] * len(legal_probs))
-            legal_probs = ((1 - hp.dirichlet_e) * legal_probs) + (hp.dirichlet_e * dir_noise)
+            legal_probs = ((1 - hp.dirichlet_e) * legal_probs) + (
+                hp.dirichlet_e * dir_noise
+            )
             sampled_action = np.random.choice(legal_actions, size=1, p=legal_probs)[0]
 
-            tup = {
-                "agent": env.agent_selection,
-                "state": state,
-                "mcts_probabilities": mcts_probabilities,
-                "final_reward": None,
-                "sampled_action": sampled_action,
-                "i_game": i_game,
-            }
-            tuples_game.append(tup)
+            tuples_game.append(
+                {
+                    "agent": env.agent_selection,
+                    "state": observation["observation"],
+                    "mcts_probabilities": mcts_probabilities,
+                    "final_reward": None,
+                    "sampled_action": sampled_action,
+                    "i_game": i_game,
+                }
+            )
+            actions_counter.update([sampled_action])
 
             env.step(sampled_action)
 
@@ -221,17 +250,80 @@ for i_train in range(hp.train_iterations):
             tup["final_reward"] = env.rewards[tup["agent"]]
             tuples_global.append(tup)
 
+        wandb.log(
+            {
+                **{
+                    "game_number": i_train * hp.n_games + i_game,
+                    "game_length": len(tuples_game),
+                    "reward_player_0": env.rewards["player_0"],
+                    "reward_player_1": env.rewards["player_1"],
+                },
+                **{f"action_count_{a}": count for a, count in actions_counter.items()},
+            }
+        )
+
+    # ----- TRAINING ------
+
     # Batchify the tuples into training batches.
-    dataloader = DataLoader(AlphaConnect4Dataset(tuples_global), batch_size=hp.batch_size, shuffle=True)
+    dataloader = DataLoader(
+        AlphaConnect4Dataset(tuples_global), batch_size=hp.batch_size, shuffle=True
+    )
 
     model.train()
     for epoch in hp.epochs:
+        losses_sum, n_batches = 0, 0
         for states, (mcts_probs, final_rewards) in dataloader:
             pred_probs, pred_values = model(states)
 
             # l = (z - v)^2 - pie.T * log(p)
-            loss = F.mse_loss(pred_values, final_rewards) - mcts_probs @ torch.log(pred_probs)
+            loss = F.mse_loss(pred_values, final_rewards) - mcts_probs @ torch.log(
+                pred_probs
+            )
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            losses_sum += loss.item()
+            n_batches += 1
+        wandb.log(
+            {
+                "epoch": i_train * hp.epochs + epoch,
+                "loss": losses_sum / n_batches,
+            }
+        )
+
+    # ---- EVAL ----
+
+    old_model = best_model
+    new_model = model
+    for i_game in range(hp.n_eval_games):
+        env.reset()
+        tree.clear()
+        tree[tuple(env.unwrapped.board)] = Node(env)
+        if np.random.choice([True, False]):
+            p1 = old_model
+            p2 = new_model
+        else:
+            p2 = old_model
+            p1 = new_model
+        while not any(env.dones.values()):
+            model = p1 if env.agent_selection == 'player_0' else p2
+            
+
+
+
+
+
+    win_rate = 0.55  # TODO: Implement evaluation.
+
+    # TODO: I don't get the concept of temperature fully.
+    # temperature = exp(- (i_train + 1) * hp.temperature_decay_rate)
+
+    wandb.log(
+        {
+            "train_iteration": i_train,
+            "win_rate": win_rate,
+            'temperature': temperature,
+        }
+    )
