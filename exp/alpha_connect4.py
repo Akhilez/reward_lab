@@ -15,26 +15,29 @@ from tqdm import tqdm
 
 hp = DictConfig(
     dict(
-        train_iterations=100,
-        n_games=20,
-        mcts_sims=10,
-        epochs=20,
-        batch_size=64,
+        train_iterations=1000,
+        n_games=50,
+        mcts_sims=25,
+        epochs=10,
+        batch_size=512,
         dirichlet_e=0.25,
         dirichlet_alpha=0.3,
-        lr=1e-3,
+        lr=1e-2,
         weight_decay=1e-4,
         lambda_mcts_selection=1,
         model_depth=8,
-        model_width=128,
+        model_width=256,
         wandb=dict(
             mode="online",
             project="AlphaZeroConnect4",
             name="azc_" + datetime.now().strftime("%-d%H%M%S"),
         ),
         n_eval_games=10,
+        eval_every=1,
         min_win_rate=0.55,
         temperature_decay_rate=0.1,
+        device='cuda:1',
+        replay_buffer_size=25000
     )
 )
 
@@ -89,9 +92,9 @@ class AlphaConnect4Model(nn.Module):
         return policy, value
 
 
-model = AlphaConnect4Model(hp.model_width, hp.model_depth)
+model = AlphaConnect4Model(hp.model_width, hp.model_depth).to(hp.device)
 optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
-best_model: AlphaConnect4Model = deepcopy(model)  # TODO: Implement best model
+# best_model: AlphaConnect4Model = deepcopy(model)  # TODO: Implement best model
 tree: Dict[tuple, Any] = dict()
 temperature = 1
 env = connect_four_v3.env()
@@ -130,14 +133,16 @@ class Node:
         if len(self.children) == 0:
             return self
 
-        q = self.v_sum / (1 + self.n)
+        q = np.array([0 if c is None else c.v_sum for c in self.children])
+        q = np.array([q[i] / self.n[i] if self.n[i] != 0 else 1 for i in range(len(self.n))])
         u = self.p / (1 + self.n)
 
         selection_scores = (q + hp.lambda_mcts_selection * u)
         selection_scores = torch.softmax(torch.from_numpy(selection_scores), 0).numpy()
         selection_scores *= self.action_mask
+        selection_scores /= selection_scores.sum()
 
-        i = selection_scores.argmax()
+        i = np.random.choice(range(len(selection_scores)), p=selection_scores)
         return self.children[i].select()
 
     def expand(self):
@@ -156,7 +161,6 @@ class Node:
             if child is None:
                 child = tree.setdefault(state, Node(env))
             child.parents.add(self)
-
             self.children.append(child)
 
     def evaluate(self):
@@ -167,8 +171,8 @@ class Node:
         state = torch.from_numpy(np.moveaxis(observation["observation"], -1, 0)).unsqueeze(0).float()
         model.eval()
         with torch.no_grad():
-            pred_prob, pred_value = model(state)
-        self.p = torch.softmax(pred_prob[0], 0).numpy()
+            pred_prob, pred_value = model(state.to(hp.device))
+        self.p = torch.softmax(pred_prob[0].cpu(), 0).numpy()
         return pred_value.squeeze().item()
 
     def backup(self, value: float):
@@ -212,9 +216,10 @@ class AlphaConnect4Dataset(Dataset):
         return len(self.tuples)
 
 
+tuples_global = []
 for i_train in range(hp.train_iterations):
     # ----- GAME DATA GENERATION ------
-    tuples_global = []
+    # tuples_global = []
     for i_game in tqdm(range(hp.n_games), desc="Generating training data"):
         # Play the game using MCTS and NN, store the tuple for training.
         # Each tuple will have (s, pie, z)
@@ -259,6 +264,8 @@ for i_train in range(hp.train_iterations):
         for tup in tuples_game:
             tup["final_reward"] = env.rewards[tup["agent"]]
             tuples_global.append(tup)
+            if len(tuples_global) > hp.replay_buffer_size:
+                tuples_global.pop(0)
 
         wandb.log(
             {
@@ -267,9 +274,9 @@ for i_train in range(hp.train_iterations):
                     "game_length": len(tuples_game),
                     "reward_player_0": env.rewards["player_0"],
                     "reward_player_1": env.rewards["player_1"],
-                    "last_frame": wandb.Image(np.array(env.unwrapped.board).reshape(6, 7) * 125)
+                    # "last_frame": wandb.Image(np.array(env.unwrapped.board).reshape(6, 7) * 125)
                 },
-                **{f"action_count_{a}": count for a, count in actions_counter.items()},
+                # **{f"action_count_{a}": count for a, count in actions_counter.items()},
             }
         )
 
@@ -284,12 +291,12 @@ for i_train in range(hp.train_iterations):
     for epoch in tqdm(range(hp.epochs), desc="Training"):
         losses_sum, n_batches = 0, 0
         for states, (mcts_probs, final_rewards) in dataloader:
-            pred_probs, pred_values = model(states)
+            pred_probs, pred_values = model(states.to(hp.device))
 
             # l = (z - v)^2 - pie.T * log(p)
-            loss_policy = - mcts_probs.T @ torch.log(torch.softmax(pred_probs, 1))
+            loss_policy = - mcts_probs.T.to(hp.device) @ torch.log(torch.softmax(pred_probs, 1))
             loss_policy = loss_policy.sum()
-            loss_value = F.mse_loss(pred_values.squeeze(), final_rewards)
+            loss_value = F.mse_loss(pred_values.squeeze(), final_rewards.squeeze().to(hp.device))
             loss = loss_value + loss_policy
 
             optimizer.zero_grad()
@@ -308,7 +315,7 @@ for i_train in range(hp.train_iterations):
     # ---- EVAL ----
 
     win_rate = 0
-    for i_game in range(hp.n_eval_games):
+    for i_game in tqdm(range(hp.n_eval_games), desc="Evaluating"):
         env.reset()
         tree.clear()
         tree[tuple(env.unwrapped.board)] = Node(env)
@@ -330,7 +337,9 @@ for i_train in range(hp.train_iterations):
 
             env.step(action)
 
-        win_rate += env.rewards[player]
+        win_rate += max(0, env.rewards[player])
+    win_rate /= hp.n_eval_games
+    print(f"Win rate: {win_rate}")
 
     # TODO: I don't get the concept of temperature fully.
     # temperature = exp(- (i_train + 1) * hp.temperature_decay_rate)
@@ -339,6 +348,6 @@ for i_train in range(hp.train_iterations):
         {
             "train_iteration": i_train,
             "win_rate": win_rate,
-            'temperature': temperature,
+            # 'temperature': temperature,
         }
     )
