@@ -1,5 +1,6 @@
 from collections import Counter
 from copy import deepcopy
+from os import makedirs
 from typing import List, Set, Any, Dict, Optional
 import numpy as np
 import torch
@@ -12,32 +13,34 @@ from torch.utils.data import DataLoader, Dataset
 from datetime import datetime
 import wandb
 from tqdm import tqdm
+from torchmetrics import MeanMetric
 
 hp = DictConfig(
     dict(
         train_iterations=1000,
-        n_games=50,
+        n_games=100,
         mcts_sims=25,
-        epochs=10,
+        epochs=20,
         batch_size=512,
         dirichlet_e=0.25,
         dirichlet_alpha=0.3,
-        lr=1e-2,
+        lr=1e-1,
         weight_decay=1e-4,
         lambda_mcts_selection=1,
         model_depth=8,
         model_width=256,
         wandb=dict(
-            mode="online",
+            mode="disabled",
             project="AlphaZeroConnect4",
             name="azc_" + datetime.now().strftime("%-d%H%M%S"),
+            dir='../_wandb'
         ),
-        n_eval_games=10,
+        n_eval_games=1,
         eval_every=1,
         min_win_rate=0.55,
         temperature_decay_rate=0.1,
-        device='cuda:1',
-        replay_buffer_size=25000
+        device='cpu',
+        replay_buffer_size=None,
     )
 )
 
@@ -98,9 +101,10 @@ optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
 tree: Dict[tuple, Any] = dict()
 temperature = 1
 env = connect_four_v3.env()
+makedirs(hp.wandb.dir, exist_ok=True)
 wandb.init(
     name=hp.wandb.name,
-    dir='../_wandb',
+    dir=hp.wandb.dir,
     config=OmegaConf.to_object(hp),
     tags=[],
     allow_val_change=True,
@@ -109,6 +113,8 @@ wandb.init(
     mode=hp.wandb.mode,
     # group=hp.wandb.group,
 )
+game_length_metric = MeanMetric()
+loss_metric = MeanMetric()
 
 
 class Node:
@@ -216,10 +222,11 @@ class AlphaConnect4Dataset(Dataset):
         return len(self.tuples)
 
 
-tuples_global = []
+# tuples_global = []
 for i_train in range(hp.train_iterations):
     # ----- GAME DATA GENERATION ------
-    # tuples_global = []
+    tuples_global = []
+    game_length_metric.reset()
     for i_game in tqdm(range(hp.n_games), desc="Generating training data"):
         # Play the game using MCTS and NN, store the tuple for training.
         # Each tuple will have (s, pie, z)
@@ -254,6 +261,7 @@ for i_train in range(hp.train_iterations):
                     "final_reward": None,
                     "sampled_action": sampled_action,
                     "i_game": i_game,
+                    # "board": tuple(env.unwrapped.board),
                 }
             )
             actions_counter.update([sampled_action])
@@ -264,21 +272,22 @@ for i_train in range(hp.train_iterations):
         for tup in tuples_game:
             tup["final_reward"] = env.rewards[tup["agent"]]
             tuples_global.append(tup)
-            if len(tuples_global) > hp.replay_buffer_size:
-                tuples_global.pop(0)
+            # if len(tuples_global) > hp.replay_buffer_size:
+            #     tuples_global.pop(0)
 
-        wandb.log(
-            {
-                **{
-                    "game_number": i_train * hp.n_games + i_game,
-                    "game_length": len(tuples_game),
-                    "reward_player_0": env.rewards["player_0"],
-                    "reward_player_1": env.rewards["player_1"],
-                    # "last_frame": wandb.Image(np.array(env.unwrapped.board).reshape(6, 7) * 125)
-                },
-                # **{f"action_count_{a}": count for a, count in actions_counter.items()},
-            }
-        )
+        game_length_metric(len(tuples_game))
+        # wandb.log(
+        #     {
+        #         **{
+        #             # "game_number": i_train * hp.n_games + i_game,
+        #             # "game_length": len(tuples_game),
+        #             # "reward_player_0": env.rewards["player_0"],
+        #             # "reward_player_1": env.rewards["player_1"],
+        #             # "last_frame": wandb.Image(np.array(env.unwrapped.board).reshape(6, 7) * 125)
+        #         },
+        #         # **{f"action_count_{a}": count for a, count in actions_counter.items()},
+        #     }
+        # )
 
     # ----- TRAINING ------
 
@@ -287,9 +296,9 @@ for i_train in range(hp.train_iterations):
         AlphaConnect4Dataset(tuples_global), batch_size=hp.batch_size, shuffle=True
     )
 
+    loss_metric.reset()
     model.train()
     for epoch in tqdm(range(hp.epochs), desc="Training"):
-        losses_sum, n_batches = 0, 0
         for states, (mcts_probs, final_rewards) in dataloader:
             pred_probs, pred_values = model(states.to(hp.device))
 
@@ -303,17 +312,17 @@ for i_train in range(hp.train_iterations):
             loss.backward()
             optimizer.step()
 
-            losses_sum += loss.item()
-            n_batches += 1
-        wandb.log(
-            {
-                "epoch": i_train * hp.epochs + epoch,
-                "loss": losses_sum / n_batches,
-            }
-        )
+            loss_metric(loss.item())
+        # wandb.log(
+        #     {
+        #         "epoch": i_train * hp.epochs + epoch,
+        #         "loss": losses_sum / n_batches,
+        #     }
+        # )
 
     # ---- EVAL ----
 
+    frames = []
     win_rate = 0
     for i_game in tqdm(range(hp.n_eval_games), desc="Evaluating"):
         env.reset()
@@ -337,17 +346,28 @@ for i_train in range(hp.train_iterations):
 
             env.step(action)
 
+            if i_game == hp.n_eval_games - 1:
+                frames.append(np.array(env.unwrapped.board).reshape(6, 7) * 125)
+
         win_rate += max(0, env.rewards[player])
     win_rate /= hp.n_eval_games
     print(f"Win rate: {win_rate}")
 
+    # -------------- Logging and stuff -------------
+
     # TODO: I don't get the concept of temperature fully.
     # temperature = exp(- (i_train + 1) * hp.temperature_decay_rate)
+
+    torch.save(model.state_dict(), 'model.pth')
 
     wandb.log(
         {
             "train_iteration": i_train,
             "win_rate": win_rate,
             # 'temperature': temperature,
+            "game_length_avg": game_length_metric.compute(),
+            "loss_avg": loss_metric.compute(),
+            "eval_game": wandb.Video(np.array(frames).reshape((-1, 1, 6, 7)), fps=4, format="gif"),
         }
     )
+    wandb.save('model.pth')
