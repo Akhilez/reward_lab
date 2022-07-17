@@ -4,7 +4,7 @@ from os import makedirs
 from typing import List, Set, Any, Dict, Optional
 import numpy as np
 import torch
-from pettingzoo.classic import connect_four_v3
+from pettingzoo.classic import tictactoe_v3
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.nn import functional as F
@@ -17,9 +17,9 @@ from torchmetrics import MeanMetric
 
 hp = DictConfig(
     dict(
-        train_iterations=1000,
+        train_iterations=10000,
         n_games=100,
-        mcts_sims=25,
+        mcts_sims=21,
         epochs=20,
         batch_size=512,
         dirichlet_e=0.25,
@@ -27,8 +27,8 @@ hp = DictConfig(
         lr=1e-1,
         weight_decay=1e-4,
         lambda_mcts_selection=1,
-        model_depth=8,
-        model_width=256,
+        model_depth=2,
+        model_width=50,
         wandb=dict(
             mode="online",
             project="AlphaZeroConnect4",
@@ -45,7 +45,7 @@ hp = DictConfig(
 )
 
 
-class AlphaConnect4Model(nn.Module):
+class AlphaT3Model(nn.Module):
     def __init__(self, width, depth):
         super().__init__()
         self.conv_block = nn.Sequential(
@@ -70,16 +70,16 @@ class AlphaConnect4Model(nn.Module):
             nn.BatchNorm2d(2),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(6 * 7 * 2, 7),
+            nn.Linear(3 * 3 * 2, 9),
         )
         self.value_head = nn.Sequential(
             nn.Conv2d(width, 1, kernel_size=(1, 1), stride=1, padding=0),
             nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(6 * 7 * 1, 256),
+            nn.Linear(3 * 3 * 1, width),
             nn.ReLU(),
-            nn.Linear(256, 1),
+            nn.Linear(width, 1),
             nn.Tanh(),
         )
 
@@ -95,7 +95,7 @@ class AlphaConnect4Model(nn.Module):
         return policy, value
 
 
-class SimpleAlphaConnect4Model(nn.Module):
+class SimpleT3Model(nn.Module):
     def __init__(
         self, in_size: int, units: List[int], out_size: int, flatten: bool = False
     ):
@@ -130,13 +130,13 @@ class SimpleAlphaConnect4Model(nn.Module):
         return policy, value
 
 
-# model = AlphaConnect4Model(hp.model_width, hp.model_depth).to(hp.device)
-model = SimpleAlphaConnect4Model(2 * 6 * 7, [50], 7 + 1, flatten=True).to(hp.device)
+# model = AlphaT3Model(hp.model_width, hp.model_depth).to(hp.device)
+model = SimpleT3Model(2 * 3 * 3, [50], 9 + 1, flatten=True).to(hp.device)
 optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
 # best_model: AlphaConnect4Model = deepcopy(model)  # TODO: Implement best model
 tree: Dict[tuple, Any] = dict()
 temperature = 1
-env = connect_four_v3.env()
+env = tictactoe_v3.env()
 makedirs(hp.wandb.dir, exist_ok=True)
 wandb.init(
     name=hp.wandb.name,
@@ -158,7 +158,7 @@ class Node:
         self.parents: Set[Node] = set()
         self.children: List[Optional[Node]] = []
         self.env = deepcopy(env)
-        self.s = np.array(self.env.unwrapped.board).reshape(6, 7)
+        self.s = np.array(self.env.unwrapped.board.squares).reshape(3, 3)
         self.action_mask = self.env.observe(self.env.agent_selection)["action_mask"]
         self.p: Optional[np.ndarray] = None
         self.v_sum: float = 0.0
@@ -198,7 +198,7 @@ class Node:
                 continue
             env = deepcopy(self.env)
             env.step(action)
-            state = tuple(env.unwrapped.board)
+            state = tuple(env.unwrapped.board.squares)
             child = tree.get(state)
             if child is None:
                 child = tree.setdefault(state, Node(env))
@@ -233,10 +233,10 @@ class Node:
     def __eq__(self, other):
         if other is None:
             return False
-        return self.env.unwrapped.board == other.env.unwrapped.board
+        return self.env.unwrapped.board.squares == other.env.unwrapped.board.squares
 
     def __hash__(self):
-        return hash(tuple(self.env.unwrapped.board))
+        return hash(tuple(self.env.unwrapped.board.squares))
 
 
 class AlphaConnect4Dataset(Dataset):
@@ -245,7 +245,7 @@ class AlphaConnect4Dataset(Dataset):
 
     def __getitem__(self, index):
         tup = self.tuples[index]
-        state = np.moveaxis(tup["state"], -1, 0).astype(np.float32)  # (6, 7, 2) --> (2, 6, 7)
+        state = np.moveaxis(tup["state"], -1, 0).astype(np.float32)  # (3, 3, 2) --> (2, 3, 3)
         return (
             state,
             (
@@ -269,11 +269,11 @@ for i_train in range(hp.train_iterations):
 
         env.reset()
         tree.clear()
-        tree[tuple(env.unwrapped.board)] = Node(env)
+        tree[tuple(env.unwrapped.board.squares)] = Node(env)
         tuples_game = []
         actions_counter = Counter()
         while not any(env.dones.values()):
-            node = tree[tuple(env.unwrapped.board)]
+            node = tree[tuple(env.unwrapped.board.squares)]
             node.run_simulations(hp.mcts_sims - int(node.n.sum()))
             mcts_probabilities = node.get_probabilities()
 
@@ -297,7 +297,7 @@ for i_train in range(hp.train_iterations):
                     "final_reward": None,
                     "sampled_action": sampled_action,
                     "i_game": i_game,
-                    # "board": tuple(env.unwrapped.board),
+                    # "board": tuple(env.unwrapped.board.squares),
                 }
             )
             actions_counter.update([sampled_action])
@@ -319,7 +319,7 @@ for i_train in range(hp.train_iterations):
         #             # "game_length": len(tuples_game),
         #             # "reward_player_0": env.rewards["player_0"],
         #             # "reward_player_1": env.rewards["player_1"],
-        #             # "last_frame": wandb.Image(np.array(env.unwrapped.board).reshape(6, 7) * 125)
+        #             # "last_frame": wandb.Image(np.array(env.unwrapped.board.squares).reshape(3, 3) * 125)
         #         },
         #         # **{f"action_count_{a}": count for a, count in actions_counter.items()},
         #     }
@@ -363,13 +363,13 @@ for i_train in range(hp.train_iterations):
     for i_game in tqdm(range(hp.n_eval_games), desc="Evaluating"):
         env.reset()
         tree.clear()
-        tree[tuple(env.unwrapped.board)] = Node(env)
+        tree[tuple(env.unwrapped.board.squares)] = Node(env)
 
-        player = np.random.choice(['player_0', 'player_1'])
+        player = np.random.choice(env.possible_agents)
 
         while not any(env.dones.values()):
             if env.agent_selection == player:
-                state = tuple(env.unwrapped.board)
+                state = tuple(env.unwrapped.board.squares)
                 node = tree.get(state)
                 if node is None:
                     node = tree.setdefault(state, Node(env))
@@ -383,7 +383,7 @@ for i_train in range(hp.train_iterations):
             env.step(action)
 
             if i_game == hp.n_eval_games - 1:
-                frames.append(np.array(env.unwrapped.board).reshape(6, 7) * 125)
+                frames.append(np.array(env.unwrapped.board.squares).reshape(3, 3) * 125)
 
         win_rate += max(0, env.rewards[player])
     win_rate /= hp.n_eval_games
@@ -394,7 +394,7 @@ for i_train in range(hp.train_iterations):
     # TODO: I don't get the concept of temperature fully.
     # temperature = exp(- (i_train + 1) * hp.temperature_decay_rate)
 
-    torch.save(model.state_dict(), 'model.pth')
+    torch.save(model.state_dict(), hp.wandb.name+'.pth')
 
     wandb.log(
         {
@@ -403,7 +403,7 @@ for i_train in range(hp.train_iterations):
             # 'temperature': temperature,
             "game_length_avg": game_length_metric.compute(),
             "loss_avg": loss_metric.compute(),
-            "eval_game": wandb.Video(np.array(frames).reshape((-1, 1, 6, 7)), fps=4, format="gif"),
+            "eval_game": wandb.Video(np.array(frames).reshape((-1, 1, 3, 3)), fps=4, format="gif"),
         }
     )
-    wandb.save('model.pth')
+    wandb.save(hp.wandb.name+'.pth')
