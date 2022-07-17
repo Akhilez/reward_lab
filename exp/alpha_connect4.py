@@ -95,7 +95,43 @@ class AlphaConnect4Model(nn.Module):
         return policy, value
 
 
-model = AlphaConnect4Model(hp.model_width, hp.model_depth).to(hp.device)
+class SimpleAlphaConnect4Model(nn.Module):
+    def __init__(
+        self, in_size: int, units: List[int], out_size: int, flatten: bool = False
+    ):
+        super().__init__()
+
+        flatten_layer = [nn.Flatten()] if flatten else []
+        self.first = nn.Sequential(
+            *flatten_layer, nn.Linear(in_size, units[0]), nn.ReLU(), nn.Dropout(0.3)
+        )
+
+        self.hidden = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(units[i], units[i + 1]),
+                    nn.ReLU(),
+                    nn.Dropout(0.3),
+                )
+                for i in range(len(units) - 1)
+            ]
+        )
+
+        self.out = nn.Linear(units[-1], out_size)
+
+    def forward(self, x):
+        x = self.first(x)
+        for hidden in self.hidden:
+            x = hidden(x)
+        x = x.flatten(1)
+        x = self.out(x)
+        policy = x[:, :-1]
+        value = x[:, -1:]
+        return policy, value
+
+
+# model = AlphaConnect4Model(hp.model_width, hp.model_depth).to(hp.device)
+model = SimpleAlphaConnect4Model(2 * 6 * 7, [50], 7 + 1, flatten=True).to(hp.device)
 optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
 # best_model: AlphaConnect4Model = deepcopy(model)  # TODO: Implement best model
 tree: Dict[tuple, Any] = dict()
