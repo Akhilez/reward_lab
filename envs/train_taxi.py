@@ -1,10 +1,10 @@
 import gym
 from typing import Iterable
 import torch
-from dqn.dqn import train_dqn
-from envs.env_wrapper import GymEnvWrapper
+from dqn.dqn_default import train_dqn
+from libs.env_wrapper import GymEnvWrapper
 from omegaconf import DictConfig
-from models import GenericLinearModel
+from libs.models import GenericLinearModel
 from libs.nn_utils import to_onehot
 
 
