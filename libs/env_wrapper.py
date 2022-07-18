@@ -250,7 +250,7 @@ class PettingZooEnvWrapper(GymEnvWrapper, ABC):
         return np.nonzero(observation["action_mask"])[0]
 
 
-def petting_zoo_random_player(env: AECEnv) -> int:
+def petting_zoo_random_player(env: AECEnv) -> Any:
     action_mask = env.observe(env.agent_selection)["action_mask"]
     actions = np.nonzero(action_mask)[0]
     return np.random.choice(actions)
