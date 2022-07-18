@@ -1,5 +1,5 @@
 from omegaconf import DictConfig
-from dqn.dqn import train_dqn
+from dqn.dqn_default import train_dqn
 from dqn.dqn_double import train_dqn_double
 from dqn.dqn_e_decay import train_dqn_e_decay
 from dqn.dqn_per import train_dqn_per
