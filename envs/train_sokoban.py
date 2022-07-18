@@ -1,7 +1,7 @@
 import gym
 from griddly import gd
 from omegaconf import DictConfig
-from dqn.dqn import train_dqn
+from dqn.dqn_default import train_dqn
 from libs.env_wrapper import GriddlyEnvWrapper, NumpyStateMixin, TimeOutLostMixin
 from libs.models import GenericLinearModel
 from settings import device
