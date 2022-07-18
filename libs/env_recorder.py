@@ -26,8 +26,8 @@ class EnvRecorder:
                 if len(self.buffer[0]) >= self.duration:
                     wandb_run.log(
                         {
-                            f"video_{step}_{i}": wandb_run.Video(
-                                self._format_video(self.buffer[i]), fps=4, format="gif"
+                            f"video": wandb_run.Video(
+                                self._format_video(self.buffer[i]), fps=0.5, format="gif"
                             )
                             for i in range(self.n_envs)
                         },
