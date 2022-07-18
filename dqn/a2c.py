@@ -13,18 +13,17 @@ What's the idea behind a2c?
 
 from datetime import datetime
 from typing import List
-
 import numpy as np
 import torch
 import wandb
 from omegaconf import DictConfig
 from torch import nn
 from dqn.action_sampler import ProbabilityActionSampler
-from env_recorder import EnvRecorder
-from envs.env_wrapper import BatchEnvWrapper
+from libs.env_recorder import EnvRecorder
+from libs.env_wrapper import BatchEnvWrapper
+from libs.stats import PGStats
 from settings import BASE_DIR
 from torch.nn import functional as F
-from stats import PGStats
 
 
 class A2CStats(PGStats):
