@@ -1,20 +1,18 @@
 from typing import Tuple, Any
-
 import gym
 import numpy as np
 import torch
 from omegaconf import DictConfig
 from skimage.transform import resize
-
-from dqn.dqn import train_dqn
+from dqn.dqn_default import train_dqn
 from dqn.dqn_double import train_dqn_double
-from envs import decay_functions
-from envs.env_wrapper import (
+from libs import decay_functions
+from libs.env_wrapper import (
     TensorStateMixin,
     GymEnvWrapper,
     reset_incrementer,
 )
-from models import GenericLinearModel, GenericConvModel
+from libs.models import GenericLinearModel, GenericConvModel
 
 
 class BreakoutEnvWrapper(GymEnvWrapper, TensorStateMixin):
