@@ -1,7 +1,5 @@
 from unittest import TestCase, mock
-
 from omegaconf import DictConfig
-
 from envs.train_breakout import BreakoutEnvWrapper
 from envs.train_connect_x import ConnectXEnvWrapper
 from envs.train_frozen_lake import FrozenLakeEnvWrapper
@@ -52,7 +50,7 @@ env_cases = [
 class TestRuns(TestCase):
     @mock.patch("dqn.dqn.wandb")
     def test_dqn_vanilla(self, *_):
-        from dqn.dqn import train_dqn
+        from dqn.dqn_default import train_dqn
 
         hp = DictConfig({})
 
