@@ -52,7 +52,8 @@ class ProbabilityActionSampler(ActionSampler):
         for i in range(len(valid_actions)):
             actions = valid_actions[i]
             valid_probs = probs[i][actions]
-            action = torch.multinomial(valid_probs, 1)
-            final_actions.append(int(action))
+            action_index = torch.multinomial(valid_probs, 1)
+            assert actions[int(action_index)] in actions
+            final_actions.append(actions[int(action_index)])
 
         return final_actions

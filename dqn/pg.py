@@ -4,8 +4,7 @@ Vanilla Policy Gradients
 - Wait for all envs to finish episode yo!
 
 """
-
-from typing import Type, List
+from typing import Type
 import numpy as np
 import torch
 import wandb
@@ -13,6 +12,7 @@ from omegaconf import DictConfig
 from torch import nn
 from torch.nn import functional as F
 from datetime import datetime
+from torch.optim import Adam
 from dqn.action_sampler import ProbabilityActionSampler
 from libs.env_recorder import EnvRecorder
 from libs.env_wrapper import EnvWrapper, DoneIgnoreBatchedEnvWrapper
@@ -28,7 +28,7 @@ def train_pg(
     run_name=None,
 ):
     env = DoneIgnoreBatchedEnvWrapper(env_class, config.batch_size)
-    optim = torch.optim.Adam(model.parameters(), lr=config.lr)
+    optim = Adam(model.parameters(), lr=config.lr)
     wandb.init(
         name=f"{run_name}_{str(datetime.now().timestamp())[5:10]}",
         project=project_name or "testing_dqn",
@@ -38,6 +38,7 @@ def train_pg(
         tags=None,  # List of string tags
         notes=None,  # longer description of run
         dir=BASE_DIR,
+        mode='disabled',
     )
     wandb.watch(model)
     # TODO: Episodic env recorder?
@@ -62,9 +63,10 @@ def train_pg(
             p_pred = model(states)
             p_pred = F.softmax(p_pred, 1)
 
-            actions = sample_actions(
-                valid_actions=env.get_legal_actions(), probs=p_pred, noise=0.1
-            )
+            legal_actions = env.get_legal_actions()
+            for legal_actions_i in legal_actions:
+                assert len(legal_actions_i) > 0
+            actions = sample_actions(valid_actions=legal_actions, probs=p_pred, noise=0.1)
 
             _, rewards, done_list, _ = env.step(actions)
 

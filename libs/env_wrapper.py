@@ -39,6 +39,7 @@ class EnvWrapper(ABC, Env):
 
     @abstractmethod
     def get_legal_actions(self):
+        """Returns a list of integers for example."""
         pass
 
     def close(self):
@@ -51,18 +52,21 @@ class EnvWrapper(ABC, Env):
 
 
 class NumpyStateMixin(EnvWrapper, ABC):
+    """Use this when your env state is a numpy array"""
     @staticmethod
     def get_state_batch(envs: Iterable) -> torch.Tensor:
         return torch.tensor([env.state for env in envs]).float().to(device)
 
 
 class TensorStateMixin(EnvWrapper, ABC):
+    """Use this when your env state is a torch.Tensor"""
     @staticmethod
     def get_state_batch(envs: Iterable) -> torch.Tensor:
         return torch.stack([env.state for env in envs]).float().to(device)
 
 
 def step_incrementer(f):
+    """Decorator used to """
     def step_increment(self, action, *args, **kwargs):
         state, reward, done, info = f(self, action, *args, **kwargs)
         self.step_count += 1
@@ -173,6 +177,8 @@ class GymEnvWrapper(EnvWrapper, ABC):
 
     def step(self, action, **kwargs):
         self.state, self.reward, self.done, self.info = self.env.step(action)
+        if self.done:
+            pass
         return self.state, self.reward, self.done, self.info
 
     def reset(self):
