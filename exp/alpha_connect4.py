@@ -19,9 +19,9 @@ from torchmetrics import MeanMetric
 hp = DictConfig(
     dict(
         train_iterations=1000,
-        n_games=25,
-        mcts_sims=25,
-        epochs=25,
+        n_games=100,
+        mcts_sims=35,
+        epochs=50,
         batch_size=512,
         n_eval_games=25,
         eval_every=1,
@@ -163,49 +163,40 @@ class Node:
         self.s = np.array(self.env.unwrapped.board).reshape(6, 7)
         self.action_mask = self.env.observe(self.env.agent_selection)["action_mask"]
         self.p: Optional[np.ndarray] = None
-        self.v_sum: float = 0.0
+        self.v: float = 0.0
         self.n: np.ndarray = np.zeros((len(self.action_mask),))
+        self.q: np.ndarray = np.zeros((len(self.action_mask),))
 
     def run_simulations(self, n_sims: int, model, root, eval_mode=False):
         for i_sim in range(n_sims):
             leaf = self.select(eval_mode)
             leaf.expand(root)
-            value = leaf.evaluate(model)
-            leaf.backup(value)
+            leaf.evaluate(model)
+            leaf.backup(-self.v)
 
     def select(self, eval_mode=False) -> "Node":
         if len(self.children) == 0:
             return self
 
-        # child c is None if it is an illegal action. Value is -1
-        q = np.array([-1 if c is None else c.v_sum for c in self.children])
-        # Get q's from v_sum's
-        q = np.array(
-            [q[i] / self.n[i] if self.n[i] != 0 else 1 for i in range(len(self.n))]
-        )
-
         c_puct = hp.lambda_mcts_selection
-        u = q + c_puct * self.p * math.sqrt(sum(self.n)) / (1 + self.n)
+        u = self.q + c_puct * self.p * math.sqrt(sum(self.n)) / (1 + self.n)
 
+        u = torch.softmax(torch.from_numpy(u), dim=0)
         if eval_mode:
-            # Offset so min = 1
-            u -= u.min() - 1
             # Set u = 0 for invalid actions.
             u *= self.action_mask
             # When not eval mode, get the max u
-            i = u.argmax()
+            # TODO: Handle case where multiple actions have equal max value. Must be random b/w them.
+            i = u.argmax().item()
         else:
             # Add dirichlet noise during self-play
             # TODO: What is dirichlet noise???
-            u += np.random.random((len(self.n))) * 0.1 * u.max()
-            # Offset so min = 0
-            u -= u.min()
+            u += torch.rand((len(self.n),)) * 0.25
             # Set u = 0 for invalid actions.
             u *= self.action_mask
-            # Weighted sampling from u
-            i = np.random.choice(range(len(u)), p=u / u.sum())
+            i = torch.multinomial(u, 1)[0].item()
 
-        return self.children[i].select()
+        return self.children[i].select(eval_mode=eval_mode)
 
     def expand(self, root):
         """Just create child nodes with default values."""
@@ -235,7 +226,8 @@ class Node:
         """
 
         if len(self.children) == 0:
-            return self.env.rewards[self.env.agent_selection]
+            self.v = self.env.rewards[self.env.agent_selection]
+            return
 
         observation = self.env.observe(self.env.agent_selection)
         state = (
@@ -247,14 +239,15 @@ class Node:
         with torch.no_grad():
             pred_prob, pred_value = model(state.to(hp.device))
         self.p = torch.softmax(pred_prob[0].cpu(), 0).numpy()
-        return pred_value.squeeze().item()
+        self.v = pred_value.squeeze().item()
 
     def backup(self, value: float):
-        self.v_sum += value
         for parent in list(self.parents):
             index = parent.children.index(self)
+            # Q[s][a] = (N[s][a]*Q[s][a] + v)/(N[s][a]+1)
+            parent.q[index] = (parent.n[index] * parent.q[index] + value) / (parent.n[index] + 1)
             parent.n[index] += 1
-            parent.backup(value)
+            parent.backup(-value)
 
     def get_probabilities(self) -> np.ndarray:
         probs = self.n ** (1 / temperature)
