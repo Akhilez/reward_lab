@@ -1,3 +1,4 @@
+import math
 from collections import Counter
 from copy import deepcopy
 from os import makedirs
@@ -18,28 +19,29 @@ from torchmetrics import MeanMetric
 hp = DictConfig(
     dict(
         train_iterations=1000,
-        n_games=100,
+        n_games=25,
         mcts_sims=25,
-        epochs=20,
+        epochs=25,
         batch_size=512,
+        n_eval_games=25,
+        eval_every=1,
         dirichlet_e=0.25,
         dirichlet_alpha=0.3,
-        lr=1e-1,
-        weight_decay=1e-4,
+        lr=1e-2,
+        weight_decay=1e-5,
         lambda_mcts_selection=1,
+        win_rate_threshold=0.50,
         model_depth=8,
         model_width=256,
         wandb=dict(
             mode="online",
             project="AlphaZeroConnect4",
             name="azc_" + datetime.now().strftime("%-d%H%M%S"),
-            dir='../_wandb'
+            dir="../_wandb",
         ),
-        n_eval_games=10,
-        eval_every=1,
         min_win_rate=0.55,
         temperature_decay_rate=0.1,
-        device='cuda:0',
+        device="cpu",
         replay_buffer_size=None,
     )
 )
@@ -126,14 +128,14 @@ class SimpleAlphaConnect4Model(nn.Module):
         x = x.flatten(1)
         x = self.out(x)
         policy = x[:, :-1]
-        value = x[:, -1:]
+        value = torch.tanh(x[:, -1:])
         return policy, value
 
 
 # model = AlphaConnect4Model(hp.model_width, hp.model_depth).to(hp.device)
-model = SimpleAlphaConnect4Model(2 * 6 * 7, [50], 7 + 1, flatten=True).to(hp.device)
+model = SimpleAlphaConnect4Model(2 * 6 * 7, [64, 64], 7 + 1, flatten=True).to(hp.device)
 optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
-# best_model: AlphaConnect4Model = deepcopy(model)  # TODO: Implement best model
+prev_model = deepcopy(model)
 tree: Dict[tuple, Any] = dict()
 temperature = 1
 env = connect_four_v3.env()
@@ -164,31 +166,51 @@ class Node:
         self.v_sum: float = 0.0
         self.n: np.ndarray = np.zeros((len(self.action_mask),))
 
-    def run_simulations(self, n_sims: int):
+    def run_simulations(self, n_sims: int, model, root, eval_mode=False):
         for i_sim in range(n_sims):
-            leaf = self.select()
-            leaf.expand()
-            value = leaf.evaluate()
+            leaf = self.select(eval_mode)
+            leaf.expand(root)
+            value = leaf.evaluate(model)
             leaf.backup(value)
 
-    def select(self) -> "Node":
+    def select(self, eval_mode=False) -> "Node":
         if len(self.children) == 0:
             return self
 
-        q = np.array([0 if c is None else c.v_sum for c in self.children])
-        q = np.array([q[i] / self.n[i] if self.n[i] != 0 else 1 for i in range(len(self.n))])
-        u = self.p / (1 + self.n)
+        # child c is None if it is an illegal action. Value is -1
+        q = np.array([-1 if c is None else c.v_sum for c in self.children])
+        # Get q's from v_sum's
+        q = np.array(
+            [q[i] / self.n[i] if self.n[i] != 0 else 1 for i in range(len(self.n))]
+        )
 
-        selection_scores = (q + hp.lambda_mcts_selection * u)
-        selection_scores = torch.softmax(torch.from_numpy(selection_scores), 0).numpy()
-        selection_scores *= self.action_mask
-        selection_scores /= selection_scores.sum()
+        c_puct = hp.lambda_mcts_selection
+        u = q + c_puct * self.p * math.sqrt(sum(self.n)) / (1 + self.n)
 
-        i = np.random.choice(range(len(selection_scores)), p=selection_scores)
+        if eval_mode:
+            # Offset so min = 1
+            u -= u.min() - 1
+            # Set u = 0 for invalid actions.
+            u *= self.action_mask
+            # When not eval mode, get the max u
+            i = u.argmax()
+        else:
+            # Add dirichlet noise during self-play
+            # TODO: What is dirichlet noise???
+            u += np.random.random((len(self.n))) * 0.1 * u.max()
+            # Offset so min = 0
+            u -= u.min()
+            # Set u = 0 for invalid actions.
+            u *= self.action_mask
+            # Weighted sampling from u
+            i = np.random.choice(range(len(u)), p=u / u.sum())
+
         return self.children[i].select()
 
-    def expand(self):
-        if self.env.dones[self.env.agent_selection]:
+    def expand(self, root):
+        """Just create child nodes with default values."""
+
+        if self.env.terminations[self.env.agent_selection]:
             return
 
         n_actions = len(self.action_mask)
@@ -199,18 +221,28 @@ class Node:
             env = deepcopy(self.env)
             env.step(action)
             state = tuple(env.unwrapped.board)
-            child = tree.get(state)
+            child = root.get(state)
             if child is None:
-                child = tree.setdefault(state, Node(env))
+                child = root.setdefault(state, Node(env))
             child.parents.add(self)
             self.children.append(child)
 
-    def evaluate(self):
+    def evaluate(self, model):
+        """
+        Sets child action probs from NN and returns value.
+        If terminal state, value = final reward.
+        Else, value comes from neural network.
+        """
+
         if len(self.children) == 0:
             return self.env.rewards[self.env.agent_selection]
 
         observation = self.env.observe(self.env.agent_selection)
-        state = torch.from_numpy(np.moveaxis(observation["observation"], -1, 0)).unsqueeze(0).float()
+        state = (
+            torch.from_numpy(np.moveaxis(observation["observation"], -1, 0))
+            .unsqueeze(0)
+            .float()
+        )
         model.eval()
         with torch.no_grad():
             pred_prob, pred_value = model(state.to(hp.device))
@@ -245,7 +277,9 @@ class AlphaConnect4Dataset(Dataset):
 
     def __getitem__(self, index):
         tup = self.tuples[index]
-        state = np.moveaxis(tup["state"], -1, 0).astype(np.float32)  # (6, 7, 2) --> (2, 6, 7)
+        state = np.moveaxis(tup["state"], -1, 0).astype(
+            np.float32
+        )  # (6, 7, 2) --> (2, 6, 7)
         return (
             state,
             (
@@ -272,9 +306,9 @@ for i_train in range(hp.train_iterations):
         tree[tuple(env.unwrapped.board)] = Node(env)
         tuples_game = []
         actions_counter = Counter()
-        while not any(env.dones.values()):
+        while not any(env.terminations.values()):
             node = tree[tuple(env.unwrapped.board)]
-            node.run_simulations(hp.mcts_sims - int(node.n.sum()))
+            node.run_simulations(hp.mcts_sims, model, tree, False)
             mcts_probabilities = node.get_probabilities()
 
             observation = env.observe(env.agent_selection)
@@ -339,10 +373,13 @@ for i_train in range(hp.train_iterations):
             pred_probs, pred_values = model(states.to(hp.device))
 
             # l = (z - v)^2 - pie.T * log(p)
-            loss_policy = - mcts_probs.T.to(hp.device) @ torch.log(torch.softmax(pred_probs, 1))
-            loss_policy = loss_policy.sum()
-            loss_value = F.mse_loss(pred_values.squeeze(), final_rewards.squeeze().to(hp.device))
-            loss = loss_value + loss_policy
+            loss_policy = -mcts_probs.T.to(hp.device) @ torch.log(
+                torch.softmax(pred_probs, 1)
+            )
+            loss_value = F.mse_loss(
+                pred_values.squeeze(), final_rewards.squeeze().to(hp.device)
+            )
+            loss = loss_value + loss_policy.sum()
 
             optimizer.zero_grad()
             loss.backward()
@@ -359,27 +396,32 @@ for i_train in range(hp.train_iterations):
     # ---- EVAL ----
 
     frames = []
+    trees = {"player_0": dict(), "player_1": dict()}
     win_rate = 0
     for i_game in tqdm(range(hp.n_eval_games), desc="Evaluating"):
         env.reset()
-        tree.clear()
-        tree[tuple(env.unwrapped.board)] = Node(env)
+        for t in trees.values():
+            t.clear()
+            t[tuple(env.unwrapped.board)] = Node(env)
 
-        player = np.random.choice(['player_0', 'player_1'])
+        is_player_0 = np.random.random() > 0.5
+        player = "player_0" if is_player_0 else "player_1"
+        player_model = {
+            "player_0": model if is_player_0 else prev_model,
+            "player_1": prev_model if is_player_0 else model,
+        }
 
-        while not any(env.dones.values()):
-            if env.agent_selection == player:
-                state = tuple(env.unwrapped.board)
-                node = tree.get(state)
-                if node is None:
-                    node = tree.setdefault(state, Node(env))
-                node.run_simulations(hp.mcts_sims)
-                mcts_probabilities = node.get_probabilities()
-                action = mcts_probabilities.argmax()
-            else:
-                obs = env.observe(env.agent_selection)
-                action = np.random.choice(obs['action_mask'].nonzero()[0])
-
+        while not any(env.terminations.values()):
+            state = tuple(env.unwrapped.board)
+            t = trees[env.agent_selection]
+            node = t.get(state)
+            if node is None:
+                node = t.setdefault(state, Node(env))
+            node.run_simulations(
+                hp.mcts_sims, player_model[env.agent_selection], t, eval_mode=True
+            )
+            mcts_probabilities = node.get_probabilities()
+            action = mcts_probabilities.argmax()
             env.step(action)
 
             if i_game == hp.n_eval_games - 1:
@@ -389,12 +431,15 @@ for i_train in range(hp.train_iterations):
     win_rate /= hp.n_eval_games
     print(f"Win rate: {win_rate}")
 
+    if win_rate > hp.win_rate_threshold:
+        prev_model = deepcopy(model)
+    else:
+        model = deepcopy(prev_model)
+
     # -------------- Logging and stuff -------------
 
     # TODO: I don't get the concept of temperature fully.
     # temperature = exp(- (i_train + 1) * hp.temperature_decay_rate)
-
-    torch.save(model.state_dict(), 'model.pth')
 
     wandb.log(
         {
@@ -403,7 +448,12 @@ for i_train in range(hp.train_iterations):
             # 'temperature': temperature,
             "game_length_avg": game_length_metric.compute(),
             "loss_avg": loss_metric.compute(),
-            "eval_game": wandb.Video(np.array(frames).reshape((-1, 1, 6, 7)), fps=4, format="gif"),
+            "eval_game": wandb.Video(
+                np.array(frames).reshape((-1, 1, 6, 7)), fps=4, format="gif"
+            ),
         }
     )
-    wandb.save('model.pth')
+
+    if win_rate > hp.win_rate_threshold:
+        torch.save(model.state_dict(), "model.pth")
+        wandb.save("model.pth")
