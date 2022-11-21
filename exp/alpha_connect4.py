@@ -19,8 +19,8 @@ from torchmetrics import MeanMetric
 hp = DictConfig(
     dict(
         train_iterations=1000,
-        n_games=100,
-        mcts_sims=35,
+        n_games=200,
+        mcts_sims=25,
         epochs=50,
         batch_size=512,
         n_eval_games=25,
@@ -168,6 +168,8 @@ class Node:
         self.q: np.ndarray = np.zeros((len(self.action_mask),))
 
     def run_simulations(self, n_sims: int, model, root, eval_mode=False):
+        # Resetting parents because backing up the parents is unnecessary and time-consuming
+        node.parents = set()
         for i_sim in range(n_sims):
             leaf = self.select(eval_mode)
             leaf.expand(root)
@@ -182,7 +184,7 @@ class Node:
         u = self.q + c_puct * self.p * math.sqrt(sum(self.n)) / (1 + self.n)
 
         u = torch.softmax(torch.from_numpy(u), dim=0)
-        if eval_mode:
+        if False:  # eval_mode:
             # Set u = 0 for invalid actions.
             u *= self.action_mask
             # When not eval mode, get the max u
@@ -201,7 +203,10 @@ class Node:
     def expand(self, root):
         """Just create child nodes with default values."""
 
-        if self.env.terminations[self.env.agent_selection]:
+        if (
+            self.env.terminations[self.env.agent_selection]
+            or self.env.truncations[self.env.agent_selection]
+        ):
             return
 
         n_actions = len(self.action_mask)
@@ -227,6 +232,7 @@ class Node:
 
         if len(self.children) == 0:
             self.v = self.env.rewards[self.env.agent_selection]
+            # print("Reached terminal")
             return
 
         observation = self.env.observe(self.env.agent_selection)
@@ -242,12 +248,12 @@ class Node:
         self.v = pred_value.squeeze().item()
 
     def backup(self, value: float):
-        for parent in list(self.parents):
-            index = parent.children.index(self)
+        for node in list(self.parents):
+            i = node.children.index(self)
             # Q[s][a] = (N[s][a]*Q[s][a] + v)/(N[s][a]+1)
-            parent.q[index] = (parent.n[index] * parent.q[index] + value) / (parent.n[index] + 1)
-            parent.n[index] += 1
-            parent.backup(-value)
+            node.q[i] = (node.n[i] * node.q[i] + value) / (node.n[i] + 1)
+            node.n[i] += 1
+            node.backup(-value)
 
     def get_probabilities(self) -> np.ndarray:
         probs = self.n ** (1 / temperature)
@@ -299,7 +305,7 @@ for i_train in range(hp.train_iterations):
         tree[tuple(env.unwrapped.board)] = Node(env)
         tuples_game = []
         actions_counter = Counter()
-        while not any(env.terminations.values()):
+        while not (any(env.terminations.values()) or any(env.truncations.values())):
             node = tree[tuple(env.unwrapped.board)]
             node.run_simulations(hp.mcts_sims, model, tree, False)
             mcts_probabilities = node.get_probabilities()
@@ -404,7 +410,7 @@ for i_train in range(hp.train_iterations):
             "player_1": prev_model if is_player_0 else model,
         }
 
-        while not any(env.terminations.values()):
+        while not (any(env.terminations.values()) or any(env.truncations.values())):
             state = tuple(env.unwrapped.board)
             t = trees[env.agent_selection]
             node = t.get(state)
@@ -426,8 +432,8 @@ for i_train in range(hp.train_iterations):
 
     if win_rate > hp.win_rate_threshold:
         prev_model = deepcopy(model)
-    else:
-        model = deepcopy(prev_model)
+    # else:
+    #     model = deepcopy(prev_model)
 
     # -------------- Logging and stuff -------------
 
