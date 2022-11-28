@@ -1,5 +1,9 @@
+"""
+AlphaZero with pettingzoo env interface.
+Background run: nohup python alpha_connect4.py > /dev/null 2>&1 &
+"""
 import math
-from collections import Counter
+from collections import Counter, deque
 from copy import deepcopy
 from os import makedirs
 from typing import List, Set, Any, Dict, Optional
@@ -19,30 +23,29 @@ from torchmetrics import MeanMetric
 hp = DictConfig(
     dict(
         train_iterations=1000,
-        n_games=200,
-        mcts_sims=25,
-        epochs=50,
+        n_games=25,
+        mcts_sims=100,
+        epochs=10,
         batch_size=512,
-        n_eval_games=25,
-        eval_every=1,
+        max_queue_len=10_000,
+        n_eval_games=50,
+        eval_every=5,
         dirichlet_e=0.25,
         dirichlet_alpha=0.3,
-        lr=1e-2,
+        lr=1e-1,
         weight_decay=1e-5,
         lambda_mcts_selection=1,
         win_rate_threshold=0.50,
-        model_depth=8,
-        model_width=256,
+        model_depth=4,
+        model_width=128,
         wandb=dict(
             mode="online",
             project="AlphaZeroConnect4",
             name="azc_" + datetime.now().strftime("%-d%H%M%S"),
             dir="../_wandb",
         ),
-        min_win_rate=0.55,
         temperature_decay_rate=0.1,
-        device="cpu",
-        replay_buffer_size=None,
+        device="cuda:3",
     )
 )
 
@@ -73,6 +76,7 @@ class AlphaConnect4Model(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(6 * 7 * 2, 7),
+            nn.Softmax(),
         )
         self.value_head = nn.Sequential(
             nn.Conv2d(width, 1, kernel_size=(1, 1), stride=1, padding=0),
@@ -132,8 +136,8 @@ class SimpleAlphaConnect4Model(nn.Module):
         return policy, value
 
 
-# model = AlphaConnect4Model(hp.model_width, hp.model_depth).to(hp.device)
-model = SimpleAlphaConnect4Model(2 * 6 * 7, [64, 64], 7 + 1, flatten=True).to(hp.device)
+model = AlphaConnect4Model(hp.model_width, hp.model_depth).to(hp.device)
+# model = SimpleAlphaConnect4Model(2 * 6 * 7, [64, 64, 64, 64], 7 + 1, flatten=True).to(hp.device)
 optimizer = Adam(model.parameters(), lr=hp.lr, weight_decay=hp.weight_decay)
 prev_model = deepcopy(model)
 tree: Dict[tuple, Any] = dict()
@@ -193,7 +197,7 @@ class Node:
         else:
             # Add dirichlet noise during self-play
             # TODO: What is dirichlet noise???
-            u += torch.rand((len(self.n),)) * 0.25
+            u += torch.rand((len(self.n),)) * 0.10
             # Set u = 0 for invalid actions.
             u *= self.action_mask
             i = torch.multinomial(u, 1)[0].item()
@@ -244,7 +248,7 @@ class Node:
         model.eval()
         with torch.no_grad():
             pred_prob, pred_value = model(state.to(hp.device))
-        self.p = torch.softmax(pred_prob[0].cpu(), 0).numpy()
+        self.p = pred_prob[0].cpu().numpy()
         self.v = pred_value.squeeze().item()
 
     def backup(self, value: float):
@@ -276,9 +280,7 @@ class AlphaConnect4Dataset(Dataset):
 
     def __getitem__(self, index):
         tup = self.tuples[index]
-        state = np.moveaxis(tup["state"], -1, 0).astype(
-            np.float32
-        )  # (6, 7, 2) --> (2, 6, 7)
+        state = np.moveaxis(tup["state"], -1, 0).astype(np.float32)  # (6, 7, 2) --> (2, 6, 7)
         return (
             state,
             (
@@ -291,10 +293,11 @@ class AlphaConnect4Dataset(Dataset):
         return len(self.tuples)
 
 
-# tuples_global = []
+tuples_global = deque([], maxlen=hp.max_queue_len)
 for i_train in range(hp.train_iterations):
+    iter_log = {"train_iteration": i_train}  # 'temperature': temperature,
+
     # ----- GAME DATA GENERATION ------
-    tuples_global = []
     game_length_metric.reset()
     for i_game in tqdm(range(hp.n_games), desc="Generating training data"):
         # Play the game using MCTS and NN, store the tuple for training.
@@ -341,8 +344,6 @@ for i_train in range(hp.train_iterations):
         for tup in tuples_game:
             tup["final_reward"] = env.rewards[tup["agent"]]
             tuples_global.append(tup)
-            # if len(tuples_global) > hp.replay_buffer_size:
-            #     tuples_global.pop(0)
 
         game_length_metric(len(tuples_game))
         # wandb.log(
@@ -357,13 +358,13 @@ for i_train in range(hp.train_iterations):
         #         # **{f"action_count_{a}": count for a, count in actions_counter.items()},
         #     }
         # )
+    iter_log['dataset_size'] = len(tuples_global)
+    iter_log['game_length_avg'] = game_length_metric.compute()
 
     # ----- TRAINING ------
 
     # Batchify the tuples into training batches.
-    dataloader = DataLoader(
-        AlphaConnect4Dataset(tuples_global), batch_size=hp.batch_size, shuffle=True
-    )
+    dataloader = DataLoader(AlphaConnect4Dataset(tuples_global), batch_size=hp.batch_size, shuffle=True)
 
     loss_metric.reset()
     model.train()
@@ -372,12 +373,8 @@ for i_train in range(hp.train_iterations):
             pred_probs, pred_values = model(states.to(hp.device))
 
             # l = (z - v)^2 - pie.T * log(p)
-            loss_policy = -mcts_probs.T.to(hp.device) @ torch.log(
-                torch.softmax(pred_probs, 1)
-            )
-            loss_value = F.mse_loss(
-                pred_values.squeeze(), final_rewards.squeeze().to(hp.device)
-            )
+            loss_policy = -mcts_probs.T.to(hp.device) @ torch.log(pred_probs)
+            loss_value = F.mse_loss(pred_values.squeeze(), final_rewards.squeeze().to(hp.device))
             loss = loss_value + loss_policy.sum()
 
             optimizer.zero_grad()
@@ -391,68 +388,66 @@ for i_train in range(hp.train_iterations):
         #         "loss": losses_sum / n_batches,
         #     }
         # )
+    iter_log['loss_avg'] = loss_metric.compute()
 
     # ---- EVAL ----
 
-    frames = []
-    trees = {"player_0": dict(), "player_1": dict()}
-    win_rate = 0
-    for i_game in tqdm(range(hp.n_eval_games), desc="Evaluating"):
-        env.reset()
-        for t in trees.values():
-            t.clear()
-            t[tuple(env.unwrapped.board)] = Node(env)
+    if i_train % hp.eval_every == 0 and i_train > 0:
 
-        is_player_0 = np.random.random() > 0.5
-        player = "player_0" if is_player_0 else "player_1"
-        player_model = {
-            "player_0": model if is_player_0 else prev_model,
-            "player_1": prev_model if is_player_0 else model,
-        }
+        frames = []
+        trees = {"player_0": dict(), "player_1": dict()}
+        win_rate = 0
+        for i_game in tqdm(range(hp.n_eval_games), desc="Evaluating"):
+            env.reset()
+            for t in trees.values():
+                t.clear()
+                t[tuple(env.unwrapped.board)] = Node(env)
 
-        while not (any(env.terminations.values()) or any(env.truncations.values())):
-            state = tuple(env.unwrapped.board)
-            t = trees[env.agent_selection]
-            node = t.get(state)
-            if node is None:
-                node = t.setdefault(state, Node(env))
-            node.run_simulations(
-                hp.mcts_sims, player_model[env.agent_selection], t, eval_mode=True
-            )
-            mcts_probabilities = node.get_probabilities()
-            action = mcts_probabilities.argmax()
-            env.step(action)
+            is_player_0 = np.random.random() > 0.5
+            player = "player_0" if is_player_0 else "player_1"
+            player_model = {
+                "player_0": model if is_player_0 else prev_model,
+                "player_1": prev_model if is_player_0 else model,
+            }
 
-            if i_game == hp.n_eval_games - 1:
-                frames.append(np.array(env.unwrapped.board).reshape(6, 7) * 125)
+            while not (any(env.terminations.values()) or any(env.truncations.values())):
+                state = tuple(env.unwrapped.board)
+                t = trees[env.agent_selection]
+                node = t.get(state)
+                if node is None:
+                    node = t.setdefault(state, Node(env))
+                node.run_simulations(
+                    hp.mcts_sims, player_model[env.agent_selection], t, eval_mode=True
+                )
+                mcts_probabilities = node.get_probabilities()
+                action = mcts_probabilities.argmax()
+                env.step(action)
 
-        win_rate += max(0, env.rewards[player])
-    win_rate /= hp.n_eval_games
-    print(f"Win rate: {win_rate}")
+                if i_game == hp.n_eval_games - 1:
+                    frames.append(np.array(env.unwrapped.board).reshape(6, 7) * 125)
 
-    if win_rate > hp.win_rate_threshold:
-        prev_model = deepcopy(model)
-    # else:
-    #     model = deepcopy(prev_model)
+            win_rate += max(0, env.rewards[player])
+        win_rate /= hp.n_eval_games
+        print(f"Win rate: {win_rate}")
+
+        if win_rate > hp.win_rate_threshold:
+            prev_model = deepcopy(model)
+            torch.save(model.state_dict(), "model.pth")
+            wandb.save("model.pth")
+        # else:
+        #     model = deepcopy(prev_model)
+
+        iter_log['win_rate'] = win_rate
+        iter_log["eval_game"] = wandb.Video(
+            np.array(frames).reshape((-1, 1, 6, 7)), fps=4, format="gif"
+        )
 
     # -------------- Logging and stuff -------------
 
     # TODO: I don't get the concept of temperature fully.
     # temperature = exp(- (i_train + 1) * hp.temperature_decay_rate)
 
-    wandb.log(
-        {
-            "train_iteration": i_train,
-            "win_rate": win_rate,
-            # 'temperature': temperature,
-            "game_length_avg": game_length_metric.compute(),
-            "loss_avg": loss_metric.compute(),
-            "eval_game": wandb.Video(
-                np.array(frames).reshape((-1, 1, 6, 7)), fps=4, format="gif"
-            ),
-        }
-    )
+    wandb.log(iter_log)
 
-    if win_rate > hp.win_rate_threshold:
-        torch.save(model.state_dict(), "model.pth")
-        wandb.save("model.pth")
+
+# pid: 1163598, 1168936
