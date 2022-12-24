@@ -13,7 +13,9 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
 
         self.critic = nn.Sequential(
-            nn.Linear(num_inputs, hidden_size), nn.ReLU(), nn.Linear(hidden_size, 1)
+            nn.Linear(num_inputs, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
         )
 
         self.actor = nn.Sequential(
@@ -31,18 +33,13 @@ class ActorCritic(nn.Module):
 
 
 def plot(frame_idx, rewards):
-    # clear_output(True)
-    # plt.figure(figsize=(20, 5))
-    # plt.subplot(131)
     plt.title("frame %s. reward: %s" % (frame_idx, rewards[-1]))
     plt.plot(rewards)
     plt.show()
 
 
-def test_env(env, model, device, vis=False):
+def test_env(env, model, device):
     state = env.reset()
-    if vis:
-        env.render()
     done = False
     total_reward = 0
     while not done:
@@ -50,8 +47,6 @@ def test_env(env, model, device, vis=False):
         dist, _ = model(state)
         next_state, reward, done, _ = env.step(dist.sample().cpu().numpy()[0])
         state = next_state
-        if vis:
-            env.render()
         total_reward += reward
     return total_reward
 
@@ -122,6 +117,7 @@ def main():
                 test_rewards.append(np.mean([test_env(env, model, device) for _ in range(10)]))
                 plot(frame_idx, test_rewards)
 
+        # Bootstrap to get returns in n-step
         state = torch.FloatTensor(state).to(device)
         _, next_value = model(state)
         returns = compute_returns(next_value, rewards, masks)
@@ -132,16 +128,16 @@ def main():
 
         advantage = returns - values
 
+        # Losses
         actor_loss = -(log_probs * advantage.detach()).mean()
         critic_loss = advantage.pow(2).mean()
-
         loss = actor_loss + 0.5 * critic_loss - 0.001 * entropy
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-    print(test_env(env, model, device, False))
+    print(test_env(env, model, device))
 
 
 if __name__ == "__main__":
