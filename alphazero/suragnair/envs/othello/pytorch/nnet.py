@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from alphazero.lib.base_classes import NeuralNet
-from alphazero.lib.utils import DotDict, AverageMeter
+from alphazero.suragnair.lib.base_classes import NeuralNet
+from alphazero.suragnair.lib.utils import DotDict, AverageMeter
 
 
 args = DotDict(

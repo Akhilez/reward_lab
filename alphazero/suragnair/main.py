@@ -1,8 +1,8 @@
 import logging
-from alphazero.envs.othello.othello_game import OthelloGame
-from alphazero.envs.othello.pytorch.nnet import NNetWrapper
-from alphazero.lib.coach import Coach
-from alphazero.lib.utils import DotDict
+from alphazero.suragnair.envs.othello.othello_game import OthelloGame
+from alphazero.suragnair.envs.othello.pytorch.nnet import NNetWrapper
+from alphazero.suragnair.lib.coach import Coach
+from alphazero.suragnair.lib.utils import DotDict
 
 Game = OthelloGame
 nn = NNetWrapper

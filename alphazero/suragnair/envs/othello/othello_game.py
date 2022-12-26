@@ -1,6 +1,6 @@
 import numpy as np
-from alphazero.envs.othello.othello_logic import Board
-from alphazero.lib.base_classes import Game
+from alphazero.suragnair.envs.othello.othello_logic import Board
+from alphazero.suragnair.lib.base_classes import Game
 
 
 class OthelloGame(Game):

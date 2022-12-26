@@ -6,9 +6,9 @@ from pickle import Pickler, Unpickler
 from random import shuffle
 import numpy as np
 from tqdm import tqdm
-from alphazero.lib.arena import Arena
-from alphazero.lib.base_classes import NeuralNet, Game
-from alphazero.lib.mcts import MCTS
+from alphazero.suragnair.lib.arena import Arena
+from alphazero.suragnair.lib.base_classes import NeuralNet, Game
+from alphazero.suragnair.lib.mcts import MCTS
 
 log = logging.getLogger(__name__)
 
