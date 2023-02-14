@@ -16,6 +16,7 @@ webpack-stats.json
 outputs/
 multirun/
 wandb/
+weights/
 
 ### OSX ###
 .AppleDouble
