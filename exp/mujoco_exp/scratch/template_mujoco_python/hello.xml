@@ -1,0 +1,15 @@
+<mujoco>
+	<option gravity="0 0 -9.81" />
+  <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
+    <geom type="plane" size="1 1 0.1" rgba=".9 0 0 1"/>
+    <body pos="0 0 1" euler="0 30 0">
+      <joint type="ball" pos="0 0 0.2"/>
+      <geom type="cylinder" size="0.025 0.2" rgba="0 .9 0 1" mass="2"/>
+			<body pos="0 0 -0.4" euler="0 0 0">
+				<joint type="hinge" pos="0 0 0.2" axis="0 1 0"/>
+				<geom type="cylinder" size="0.025 0.2" rgba="0.9 0 0 1" mass="2"/>
+			</body>
+    </body>
+  </worldbody>
+</mujoco>
