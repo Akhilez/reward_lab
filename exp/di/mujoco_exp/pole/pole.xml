@@ -1,14 +1,17 @@
 <mujoco>
-	<option gravity="0 0 -9.8" viscosity="0.05" wind="0 0 0" />
+	<option gravity="0 0 -9.8" viscosity="0.1" wind="0 0 0" />
   <worldbody>
     <light diffuse=".5 .5 .5" pos="0 0 7" dir="0 0 -1"/>
     <geom type="plane" size="1 1 0.1" rgba=".9 0.9 0.9 1"/>
-    <body pos="0 0 0.3" euler="20 0 0">
-      <geom type="cylinder" size="0.01 0.1" pos="0 0 0" />
-      <joint name="main_hinge" type="hinge" pos="0 0 0.1" axis="1 0 0" />
+    <body pos="0 0 0.3" euler="0 0 0">
+      <geom type="cylinder" size="0.01 0.1" pos="0 0 0" mass="1"/>
+      <joint name="main_hinge" type="hinge" pos="0 0 0.1" axis="1 0 0" damping="0.1" range="-360 360" limited="true" />
     </body>
   </worldbody>
   <sensor>
     <jointvel joint="main_hinge" />
   </sensor>
+  <actuator>
+    <motor joint="main_hinge" ctrllimited="true" ctrlrange="-10 10"  />
+  </actuator>
 </mujoco>
