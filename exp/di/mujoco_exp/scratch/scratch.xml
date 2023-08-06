@@ -1,0 +1,100 @@
+<mujoco model="swimmer">
+  <!--  <include file="../common/visual.xml"/>-->
+  <visual>
+    <headlight ambient=".4 .4 .4" diffuse=".8 .8 .8" specular="0.1 0.1 0.1"/>
+    <map znear=".01"/>
+    <quality shadowsize="2048"/>
+  </visual>
+
+  <!--
+  Common textures, colors and materials to be used throughout this suite. Some
+  materials such as xxx_highlight are activated on occurence of certain events,
+  for example receiving a positive reward.
+  -->
+  <asset>
+    <texture name="skybox" type="skybox" builtin="gradient" rgb1=".4 .6 .8" rgb2="0 0 0"
+             width="800" height="800" mark="random" markrgb="1 1 1"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1=".1 .2 .3" rgb2=".2 .3 .4"
+             width="300" height="300" mark="edge" markrgb=".2 .3 .4"/>
+
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
+
+    <material name="self" rgba=".7 .5 .3 1"/>
+    <material name="self_default" rgba=".7 .5 .3 1"/>
+    <material name="self_highlight" rgba="0 .5 .3 1"/>
+
+    <material name="effector" rgba=".7 .4 .2 1"/>
+    <material name="effector_default" rgba=".7 .4 .2 1"/>
+    <material name="effector_highlight" rgba="0 .5 .3 1"/>
+
+    <material name="decoration" rgba=".3 .5 .7 1"/>
+
+    <material name="eye" rgba="0 .2 1 1"/>
+
+    <material name="target" rgba=".6 .3 .3 1"/>
+    <material name="target_default" rgba=".6 .3 .3 1"/>
+    <material name="target_highlight" rgba=".6 .3 .3 .4"/>
+
+    <material name="site" rgba=".5 .5 .5 .3"/>
+  </asset>
+
+  <option timestep="0.002" density="3000">
+    <flag contact="disable"/>
+  </option>
+
+  <default>
+    <default class="swimmer">
+      <joint type="hinge" pos="0 -.05 0" axis="0 0 1" limited="true" solreflimit=".05 1" solimplimit="0 .8 .1"
+             armature="1e-6"/>
+      <default class="inertial">
+        <geom type="box" size=".001 .05 .01" rgba="0 0 0 0" mass=".01"/>
+      </default>
+      <default class="visual">
+        <geom type="capsule" size=".01" fromto="0 -.05 0 0 .05 0" material="self" mass="0"/>
+      </default>
+      <site size=".01" rgba="0 0 0 0"/>
+    </default>
+    <default class="free">
+      <joint limited="false" stiffness="0" armature="0"/>
+    </default>
+    <motor gear="5e-4" ctrllimited="true" ctrlrange="-1 1"/>
+  </default>
+
+  <worldbody>
+    <geom name="ground" type="plane" size="2 2 0.1" material="grid"/>
+    <body name="head" pos="0 0 .05" childclass="swimmer">
+      <light name="light_1" diffuse=".8 .8 .8" pos="0 0 1.5"/>
+
+      <geom name="head" type="ellipsoid" size=".02 .04 .017" pos="0 -.022 0" material="self" mass="0"/>
+      <geom name="nose" type="sphere" pos="0 -.06 0" size=".004" material="effector" mass="0"/>
+      <geom name="eyes" type="capsule" fromto="-.006 -.054 .005 .006 -.054 .005" size=".004" material="eye" mass="0"/>
+
+      <camera name="tracking1" pos="0 -.2 .5" xyaxes="1 0 0 0 1 1" mode="trackcom" fovy="60"/>
+      <camera name="tracking2" pos="-.9 .5 .15" xyaxes="0 -1 0 .3 0 1" mode="trackcom" fovy="60"/>
+      <camera name="eyes" pos="0 -.058 .005" xyaxes="-1 0 0 0 0 1"/>
+
+      <joint name="rootx" class="free" type="slide" axis="1 0 0" pos="0 -.05 0"/>
+      <joint name="rooty" class="free" type="slide" axis="0 1 0" pos="0 -.05 0"/>
+      <joint name="rootz" class="free" type="hinge" axis="0 0 1" pos="0 -.05 0"/>
+
+      <geom name="inertial" class="inertial"/>
+      <geom name="visual" class="visual"/>
+
+      <site name="head"/>
+    </body>
+    <geom name="target" type="sphere" pos="1 1 .05" size=".1" material="target"/>
+    <light name="target_light" diffuse="1 1 1" pos="1 1 1.5"/>
+  </worldbody>
+
+  <sensor>
+    <framepos name="nose_pos" objtype="geom" objname="nose"/>
+    <framepos name="target_pos" objtype="geom" objname="target"/>
+
+    <framexaxis name="head_xaxis" objtype="xbody" objname="head"/>
+    <frameyaxis name="head_yaxis" objtype="xbody" objname="head"/>
+
+    <velocimeter name="head_vel" site="head"/>
+    <gyro name="head_gyro" site="head"/>
+  </sensor>
+
+</mujoco>

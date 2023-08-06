@@ -103,6 +103,8 @@ xml_path = abspath
 # MuJoCo data structures
 model = mj.MjModel.from_xml_path(xml_path)  # MuJoCo model
 data = mj.MjData(model)  # MuJoCo data
+print(data)
+print(data.qpos)
 cam = mj.MjvCamera()  # Abstract camera
 opt = mj.MjvOption()  # visualization options
 
@@ -125,10 +127,10 @@ glfw.set_mouse_button_callback(window, mouse_button)
 glfw.set_scroll_callback(window, scroll)
 
 # Example on how to set camera configuration
-# cam.azimuth = 90
-# cam.elevation = -45
-# cam.distance = 2
-# cam.lookat = np.array([0.0, 0.0, 0])
+cam.azimuth = 90
+cam.elevation = -90
+cam.distance = 5
+cam.lookat = np.array([0.0, 0.0, 0])
 
 # initialize the controller
 init_controller(model, data)

@@ -103,8 +103,6 @@ xml_path = abspath
 # MuJoCo data structures
 model = mj.MjModel.from_xml_path(xml_path)  # MuJoCo model
 data = mj.MjData(model)  # MuJoCo data
-print(data)
-print(data.qpos)
 cam = mj.MjvCamera()  # Abstract camera
 opt = mj.MjvOption()  # visualization options
 
@@ -143,6 +141,9 @@ while not glfw.window_should_close(window):
 
     while data.time - time_prev < 1.0 / 60.0:
         mj.mj_step(model, data)
+        # mj.mj_forward(model, data)
+
+    print(data.sensordata[0])
 
     if data.time >= simend:
         break
