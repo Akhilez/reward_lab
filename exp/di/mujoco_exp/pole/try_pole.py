@@ -31,6 +31,19 @@ def keyboard(window, key, scancode, act, mods):
         mj.mj_resetData(model, data)
         mj.mj_forward(model, data)
 
+    if key == glfw.KEY_LEFT:
+        print(f'Left: {data.ctrl[0]=}')
+        if act == glfw.PRESS:
+            data.ctrl[0] = -1
+            print(f"Left pressed: {data.ctrl[0]=}")
+        elif act == glfw.RELEASE:
+            data.ctrl[0] = 0
+    elif key == glfw.KEY_RIGHT:
+        if act == glfw.PRESS:
+            data.ctrl[0] = 1
+        elif act == glfw.RELEASE:
+            data.ctrl[0] = 0
+
 
 def mouse_button(window, button, act, mods):
     # update button state
@@ -143,7 +156,8 @@ while not glfw.window_should_close(window):
         mj.mj_step(model, data)
         # mj.mj_forward(model, data)
 
-    print(data.sensordata[0])
+    # print(data.sensordata[0])
+    # print(data.actuator_force[0])
 
     if data.time >= simend:
         break
