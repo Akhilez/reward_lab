@@ -22,10 +22,10 @@ Maybe multi-agent learning.
 -----------------
 Part 1: Building the framework
 
-The biggest challenge would be to build the initial framework.
+[x] ~~The biggest challenge would be to build the initial framework.
 I'll have to learn from building and understanding robots in MuJoCo GUI at first.
 Then simulating the same in python, maybe create graphs for the positions.
-Now add a few actuators to make it interactive. Apply those forces in python.
+Now add a few actuators to make it interactive. Apply those forces in python.~~
 
 Now, re-create the same with PyMJCF to basically create a robot architecture on the fly. Randomize joint locations.
 Okay, now create some tiny robots that can walk. Randomize the actions and plot locomotion.
