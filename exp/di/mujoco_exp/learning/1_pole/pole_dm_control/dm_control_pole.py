@@ -1,3 +1,5 @@
+from random import random
+
 from dm_control import mujoco
 from dm_control.mujoco.wrapper.mjbindings import enums
 import matplotlib.cm as cm
@@ -7,6 +9,7 @@ import matplotlib.animation as animation
 
 duration = 2  # (seconds)
 framerate = 60  # (Hz)
+actuator_strength = 0.2  # [0 to 1]
 
 # Visualize the joint axis
 scene_option = mujoco.wrapper.core.MjvOption()
@@ -37,6 +40,8 @@ while True:
     plot_data['end_x'].append(physics.named.data.site_xpos['end_of_pole', 'x'])
     plot_data['end_y'].append(physics.named.data.site_xpos['end_of_pole', 'y'])
     plot_data['end_z'].append(physics.named.data.site_xpos['end_of_pole', 'z'])
+
+    physics.named.data.ctrl[0] += (random() * 2 - 1) * actuator_strength
 
     if physics.data.time >= duration:
         break
