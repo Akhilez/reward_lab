@@ -11,9 +11,11 @@ framerate = 60  # (Hz)
 # Visualize the joint axis
 scene_option = mujoco.wrapper.core.MjvOption()
 scene_option.flags[enums.mjtVisFlag.mjVIS_JOINT] = True
+scene_option.frame = enums.mjtFrame.mjFRAME_GEOM
+scene_option.flags[enums.mjtVisFlag.mjVIS_TRANSPARENT] = True
 
 
-physics = mujoco.Physics.from_xml_path("/Users/akhildevarashetti/code/reward_lab/exp/di/mujoco_exp/pole/pole.xml")
+physics = mujoco.Physics.from_xml_path("/exp/di/mujoco_exp/learning/1_pole/pole.xml")
 
 
 frames = []  # for storing the generated images
