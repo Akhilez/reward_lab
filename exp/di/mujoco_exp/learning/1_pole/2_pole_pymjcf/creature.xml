@@ -29,7 +29,7 @@
       <freejoint name="unnamed_model/"/>
       <geom name="unnamed_model/torso" class="unnamed_model/" type="ellipsoid" size="0.10000000000000001 0.10000000000000001 0.050000000000000003" rgba="0.37454011884736249 0.95071430640991617 0.73199394181140509 1"/>
 
-      <site name="unnamed_model//unnamed_site_0" class="unnamed_model/" pos="0.10000000000000001 0 0" euler="0 0 0"/>
+      <site name="unnamed_model//unnamed_site_0" class="unnamed_model/" pos="0.10000000000000001 0 0" euler="0 0 0" size="0.03"/>
       <body pos="0.10000000000000001 0 0" euler="0 0 0" name="unnamed_model/unnamed_model/">
         <body name="unnamed_model/unnamed_model//unnamed_body_0">
           <joint name="unnamed_model/unnamed_model//unnamed_joint_0" class="unnamed_model/unnamed_model/" axis="0 0 1"/>
@@ -41,7 +41,7 @@
         </body>
       </body>
 
-      <site name="unnamed_model//unnamed_site_1" class="unnamed_model/" pos="-0.049999999999999989 0.086602540378443879 0" euler="0 0 2.0943951023931953"/>
+      <site name="unnamed_model//unnamed_site_1" class="unnamed_model/" pos="-0.049999999999999989 0.086602540378443879 0" size="0.03" euler="0 0 2.0943951023931953"/>
       <body pos="-0.049999999999999989 0.086602540378443879 0" euler="0 0 2.0943951023931953" name="unnamed_model/unnamed_model_1/">
         <body name="unnamed_model/unnamed_model_1//unnamed_body_0">
           <joint name="unnamed_model/unnamed_model_1//unnamed_joint_0" class="unnamed_model/unnamed_model_1/" axis="0 0 1"/>
@@ -53,7 +53,7 @@
         </body>
       </body>
 
-      <site name="unnamed_model//unnamed_site_2" class="unnamed_model/" pos="-0.050000000000000044 -0.086602540378443837 0" euler="0 0 4.1887902047863905"/>
+      <site name="unnamed_model//unnamed_site_2" class="unnamed_model/" pos="-0.050000000000000044 -0.086602540378443837 0" size="0.03" euler="0 0 4.1887902047863905"/>
       <body pos="-0.050000000000000044 -0.086602540378443837 0" euler="0 0 4.1887902047863905" name="unnamed_model/unnamed_model_2/">
         <body name="unnamed_model/unnamed_model_2//unnamed_body_0">
           <joint name="unnamed_model/unnamed_model_2//unnamed_joint_0" class="unnamed_model/unnamed_model_2/" axis="0 0 1"/>
