@@ -1,0 +1,77 @@
+<mujoco model="unnamed_model">
+  <compiler angle="radian"/>
+  <default>
+    <default class="/"/>
+    <default class="unnamed_model/"/>
+    <default class="unnamed_model/unnamed_model/">
+      <joint type="hinge" damping="2"/>
+      <geom type="capsule" rgba="0.37454011884736249 0.95071430640991617 0.73199394181140509 1"/>
+    </default>
+    <default class="unnamed_model/unnamed_model_1/">
+      <joint type="hinge" damping="2"/>
+      <geom type="capsule" rgba="0.37454011884736249 0.95071430640991617 0.73199394181140509 1"/>
+    </default>
+    <default class="unnamed_model/unnamed_model_2/">
+      <joint type="hinge" damping="2"/>
+      <geom type="capsule" rgba="0.37454011884736249 0.95071430640991617 0.73199394181140509 1"/>
+    </default>
+  </default>
+  <asset>
+    <texture name="//unnamed_texture_0" type="2d" builtin="checker" rgb1="0.20000000000000001 0.29999999999999999 0.40000000000000002" rgb2="0.29999999999999999 0.40000000000000002 0.5" width="300" height="300"/>
+    <material name="grid" class="/" texture="//unnamed_texture_0" texrepeat="5 5" reflectance="0.20000000000000001"/>
+  </asset>
+  <worldbody>
+    <geom name="//unnamed_geom_0" class="/" type="plane" size="2 2 0.10000000000000001" material="grid"/>
+    <light name="//unnamed_light_0" class="/" pos="-2 -1 3" dir="2 1 -2"/>
+    <light name="//unnamed_light_1" class="/" pos="2 -1 3" dir="-2 1 -2"/>
+    <site name="//unnamed_site_0" class="/" group="3" pos="-0.5 0 0.14999999999999999"/>
+    <body pos="-0.5 0 0.14999999999999999" name="unnamed_model/">
+      <freejoint name="unnamed_model/"/>
+      <geom name="unnamed_model/torso" class="unnamed_model/" type="ellipsoid" size="0.10000000000000001 0.10000000000000001 0.050000000000000003" rgba="0.37454011884736249 0.95071430640991617 0.73199394181140509 1"/>
+
+      <site name="unnamed_model//unnamed_site_0" class="unnamed_model/" pos="0.10000000000000001 0 0" euler="0 0 0"/>
+      <body pos="0.10000000000000001 0 0" euler="0 0 0" name="unnamed_model/unnamed_model/">
+        <body name="unnamed_model/unnamed_model//unnamed_body_0">
+          <joint name="unnamed_model/unnamed_model//unnamed_joint_0" class="unnamed_model/unnamed_model/" axis="0 0 1"/>
+          <geom name="unnamed_model/unnamed_model//unnamed_geom_0" class="unnamed_model/unnamed_model/" size="0.025000000000000001" fromto="0 0 0 0.10000000000000001 0 0"/>
+          <body name="unnamed_model/unnamed_model//unnamed_body_1" pos="0.10000000000000001 0 0">
+            <joint name="unnamed_model/unnamed_model//unnamed_joint_1" class="unnamed_model/unnamed_model/" axis="0 1 0"/>
+            <geom name="unnamed_model/unnamed_model//unnamed_geom_1" class="unnamed_model/unnamed_model/" size="0.02" fromto="0 0 0 0 0 -0.10000000000000001"/>
+          </body>
+        </body>
+      </body>
+
+      <site name="unnamed_model//unnamed_site_1" class="unnamed_model/" pos="-0.049999999999999989 0.086602540378443879 0" euler="0 0 2.0943951023931953"/>
+      <body pos="-0.049999999999999989 0.086602540378443879 0" euler="0 0 2.0943951023931953" name="unnamed_model/unnamed_model_1/">
+        <body name="unnamed_model/unnamed_model_1//unnamed_body_0">
+          <joint name="unnamed_model/unnamed_model_1//unnamed_joint_0" class="unnamed_model/unnamed_model_1/" axis="0 0 1"/>
+          <geom name="unnamed_model/unnamed_model_1//unnamed_geom_0" class="unnamed_model/unnamed_model_1/" size="0.025000000000000001" fromto="0 0 0 0.10000000000000001 0 0"/>
+          <body name="unnamed_model/unnamed_model_1//unnamed_body_1" pos="0.10000000000000001 0 0">
+            <joint name="unnamed_model/unnamed_model_1//unnamed_joint_1" class="unnamed_model/unnamed_model_1/" axis="0 1 0"/>
+            <geom name="unnamed_model/unnamed_model_1//unnamed_geom_1" class="unnamed_model/unnamed_model_1/" size="0.02" fromto="0 0 0 0 0 -0.10000000000000001"/>
+          </body>
+        </body>
+      </body>
+
+      <site name="unnamed_model//unnamed_site_2" class="unnamed_model/" pos="-0.050000000000000044 -0.086602540378443837 0" euler="0 0 4.1887902047863905"/>
+      <body pos="-0.050000000000000044 -0.086602540378443837 0" euler="0 0 4.1887902047863905" name="unnamed_model/unnamed_model_2/">
+        <body name="unnamed_model/unnamed_model_2//unnamed_body_0">
+          <joint name="unnamed_model/unnamed_model_2//unnamed_joint_0" class="unnamed_model/unnamed_model_2/" axis="0 0 1"/>
+          <geom name="unnamed_model/unnamed_model_2//unnamed_geom_0" class="unnamed_model/unnamed_model_2/" size="0.025000000000000001" fromto="0 0 0 0.10000000000000001 0 0"/>
+          <body name="unnamed_model/unnamed_model_2//unnamed_body_1" pos="0.10000000000000001 0 0">
+            <joint name="unnamed_model/unnamed_model_2//unnamed_joint_1" class="unnamed_model/unnamed_model_2/" axis="0 1 0"/>
+            <geom name="unnamed_model/unnamed_model_2//unnamed_geom_1" class="unnamed_model/unnamed_model_2/" size="0.02" fromto="0 0 0 0 0 -0.10000000000000001"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="unnamed_model/unnamed_model//unnamed_actuator_0" class="unnamed_model/unnamed_model/" joint="unnamed_model/unnamed_model//unnamed_joint_0" kp="10"/>
+    <position name="unnamed_model/unnamed_model//unnamed_actuator_1" class="unnamed_model/unnamed_model/" joint="unnamed_model/unnamed_model//unnamed_joint_1" kp="10"/>
+    <position name="unnamed_model/unnamed_model_1//unnamed_actuator_0" class="unnamed_model/unnamed_model_1/" joint="unnamed_model/unnamed_model_1//unnamed_joint_0" kp="10"/>
+    <position name="unnamed_model/unnamed_model_1//unnamed_actuator_1" class="unnamed_model/unnamed_model_1/" joint="unnamed_model/unnamed_model_1//unnamed_joint_1" kp="10"/>
+    <position name="unnamed_model/unnamed_model_2//unnamed_actuator_0" class="unnamed_model/unnamed_model_2/" joint="unnamed_model/unnamed_model_2//unnamed_joint_0" kp="10"/>
+    <position name="unnamed_model/unnamed_model_2//unnamed_actuator_1" class="unnamed_model/unnamed_model_2/" joint="unnamed_model/unnamed_model_2//unnamed_joint_1" kp="10"/>
+  </actuator>
+</mujoco>
