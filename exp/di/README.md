@@ -22,18 +22,19 @@ Maybe multi-agent learning.
 -----------------
 Part 1: Building the framework
 
-[x] ~~The biggest challenge would be to build the initial framework.
+  - [x] ~~The biggest challenge would be to build the initial framework.
 I'll have to learn from building and understanding robots in MuJoCo GUI at first.
 Then simulating the same in python, maybe create graphs for the positions.
 Now add a few actuators to make it interactive. Apply those forces in python.~~
 
-[x] ~~Now, re-create the same with PyMJCF to basically create a robot architecture on the fly. Randomize joint locations.
+  - [x] ~~Now, re-create the same with PyMJCF to basically create a robot architecture on the fly. Randomize joint locations.
 Okay, now create some tiny robots that can walk. Randomize the actions and plot locomotion.
 Cool, it's time to create some target and distance metric for reward.~~
 
-Once you have this setup, it's time to graduate to actual RL stuff.
-Learn the composer framework and create the basic locomotion env.
-Get the env to work with a basic RL algorithm.
+  - [x] ~~Once you have this setup, it's time to graduate to actual RL stuff.
+Learn the composer framework and create the basic locomotion env.~~
+
+  - [ ] Get the env to work with a basic RL algorithm.
 
 With this, we end part 1. Fuck yeah!
 
