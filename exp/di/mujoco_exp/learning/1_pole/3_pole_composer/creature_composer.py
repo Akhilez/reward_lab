@@ -269,7 +269,6 @@ print(f"{time_step=}")
 while env.physics.data.time < duration:
 
     # TODO: How to set limits on the action ranges?
-    # TODO: How long will one action last? Currently it advances 0.05. How to modify that?
     action = random_state.uniform(-np.ones_like(spec.minimum), np.ones_like(spec.maximum), spec.shape)
     # action = random_state.uniform(spec.minimum, spec.maximum, spec.shape)
     time_step = env.step(action)
