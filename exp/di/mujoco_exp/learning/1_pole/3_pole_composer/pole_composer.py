@@ -133,7 +133,9 @@ class BalancePoleOnTop(composer.Task):
         self._physics_variator.apply_variations(physics, random_state)
 
     def get_reward(self, physics):
-        return self._pole.observables.tip_pos(physics)[2] - 0.2
+        raw_pos = self._pole.observables.tip_pos(physics)[2]
+        normalized_pos = (raw_pos - 0.2) / 0.4
+        return normalized_pos
 
 
 task = BalancePoleOnTop(Pole())
@@ -159,20 +161,14 @@ print(f"Observation: {env.observation_spec()=}")
 print(f"{time_step=}")
 
 while env.physics.data.time < duration:
-
-    # TODO: How to set limits on the action ranges?
     action = random_state.uniform(spec.minimum, spec.maximum, spec.shape)
-    # action = random_state.uniform(spec.minimum, spec.maximum, spec.shape)
     time_step = env.step(action)
 
-    camera0 = env.physics.render()
-    # camera1 = env.physics.render(camera_id=1, height=200, width=200)
-    frames.append([plt.imshow(camera0, cmap=cm.Greys_r, animated=True)])
+    frames.append([plt.imshow(env.physics.render(), cmap=cm.Greys_r, animated=True)])
     rewards.append(time_step.reward)
     observations.append(copy.deepcopy(time_step.observation))
     ticks.append(env.physics.data.time)
 
-# html_video = display_video(frames, framerate=1.0 / env.control_timestep())
 animation.ArtistAnimation(fig, frames, interval=1000 / framerate, blit=True, repeat_delay=1000).save("pole.mp4")
 plt.close()
 

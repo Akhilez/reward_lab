@@ -1,3 +1,7 @@
+temp*
+*.mp4
+*.png
+
 .idea/
 temp/
 tmp/
