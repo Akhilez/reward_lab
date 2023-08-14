@@ -38,6 +38,7 @@ random_state = np.random.RandomState(42)
 def make_creature(num_legs):
     """Constructs a creature with `num_legs` legs."""
     rgba = random_state.uniform([0, 0, 0, 1], [1, 1, 1, 1])
+
     model = mjcf.RootElement()
     model.compiler.angle = "radian"  # Use radians.
 
