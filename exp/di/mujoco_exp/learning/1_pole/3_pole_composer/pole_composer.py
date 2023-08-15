@@ -54,7 +54,7 @@ def build_pole():
     arena.sensor.add("framepos", name="tip_sensor", objtype="site", objname="end_of_pole")
 
     # <motor joint="main_hinge" ctrllimited="true" ctrlrange="-10 10"  />
-    arena.actuator.add("motor", name="pole_actuator", joint="main_hinge", ctrllimited=True, ctrlrange=[-10, 10])
+    arena.actuator.add("motor", name="pole_actuator", joint="main_hinge", ctrllimited=True, ctrlrange=[-2.5, 2.5])
 
     return arena
 
@@ -133,44 +133,70 @@ class BalancePoleOnTop(composer.Task):
         self._physics_variator.apply_variations(physics, random_state)
 
     def get_reward(self, physics):
-        raw_pos = self._pole.observables.tip_pos(physics)[2]
-        normalized_pos = (raw_pos - 0.2) / 0.4
-        return normalized_pos
+        """
+        The position can be from 0.2 to 0.6.
+        We want the reward to start from a threshold height.
+        """
+        pos = self._pole.observables.tip_pos(physics)[2]
+        threshold = 0.5
+        pos = max(threshold, pos)
+        pos = (pos - threshold) / (0.6 - threshold)  # normalize (t, 0.6) to (0, 1)
+        return pos
 
 
-task = BalancePoleOnTop(Pole())
-env = composer.Environment(task, random_state=random_state)
+if __name__ == '__main__':
 
-env.reset()
-Image.fromarray(env.physics.render()).save("pole_env_start.png")
+    task = BalancePoleOnTop(Pole())
+    env = composer.Environment(task, random_state=random_state)
 
-# Simulate episode with random actions
-duration = 2  # Seconds
-framerate = 30
-frames = []
-ticks = []
-rewards = []
-observations = []
+    env.reset()
+    Image.fromarray(env.physics.render()).save("pole_env_start.png")
 
-spec = env.action_spec()
-time_step = env.reset()
-fig = plt.figure()
+    # Simulate episode with random actions
+    duration = 10  # Seconds
+    framerate = 30
+    frames = []
+    ticks = []
+    rewards = []
+    observations = []
+    joint_positions = []
+    joint_velocities = []
 
-print(f"Action:\n{spec.minimum=}\n{spec.maximum=}\n{spec.shape=}\n")
-print(f"Observation: {env.observation_spec()=}")
-print(f"{time_step=}")
+    spec = env.action_spec()
+    time_step = env.reset()
+    fig = plt.figure()
 
-while env.physics.data.time < duration:
-    action = random_state.uniform(spec.minimum, spec.maximum, spec.shape)
-    time_step = env.step(action)
+    print(f"Action:\n{spec.minimum=}\n{spec.maximum=}\n{spec.shape=}\n")
+    print(f"Observation: {env.observation_spec()=}")
+    print(f"{time_step=}")
 
-    frames.append([plt.imshow(env.physics.render(), cmap=cm.Greys_r, animated=True)])
-    rewards.append(time_step.reward)
-    observations.append(copy.deepcopy(time_step.observation))
-    ticks.append(env.physics.data.time)
+    while env.physics.data.time < duration:
+        action = random_state.uniform(spec.minimum, spec.maximum, spec.shape)
+        time_step = env.step(action)
 
-animation.ArtistAnimation(fig, frames, interval=1000 / framerate, blit=True, repeat_delay=1000).save("pole.mp4")
-plt.close()
+        frames.append([plt.imshow(env.physics.render(), cmap=cm.Greys_r, animated=True)])
+        rewards.append(time_step.reward)
+        observations.append(copy.deepcopy(time_step.observation))
+        ticks.append(env.physics.data.time)
+        joint_positions.append(time_step.observation['unnamed_model/joint_pos'].squeeze())
+        joint_velocities.append(time_step.observation['unnamed_model/joint_velocity'].squeeze())
 
-plt.plot(ticks, rewards)
-plt.show()
+    animation.ArtistAnimation(fig, frames, interval=1000 / framerate, blit=True, repeat_delay=1000).save("pole.mp4")
+    plt.close()
+
+    _, ax = plt.subplots(3, 1, sharex=True, figsize=(4, 8))
+    ax[0].plot(ticks, rewards)
+    ax[0].set_title("reward")
+
+    ax[1].plot(ticks, joint_positions)
+    ax[1].set_title("joint_pos")
+
+    ax[2].plot(ticks, joint_velocities)
+    ax[2].set_title("joint_vel")
+    ax[-1].set_xlabel("time")
+
+    # for i, key in enumerate(time_step.observation):
+    #     data = np.asarray([observations[j][key] for j in range(len(observations))])
+    #     ax[i + 1].plot(ticks, data, label=key)
+    #     ax[i + 1].set_ylabel(key)
+    plt.show()

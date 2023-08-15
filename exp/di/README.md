@@ -34,7 +34,7 @@ Cool, it's time to create some target and distance metric for reward.~~
   - [x] ~~Once you have this setup, it's time to graduate to actual RL stuff.
 Learn the composer framework and create the basic locomotion env.~~
 
-  - [ ] Get the env to work with a basic RL algorithm.
+  - [x] ~~Get the env to work with a basic RL algorithm.~~
 
 With this, we end part 1. Fuck yeah!
 
@@ -50,6 +50,7 @@ Part 3: Brain Inspired Modules
 
 -----------------
 Part 4: First baby step of DI
+
 Now we can apply both brain inspired online learning and evolve. Throw in developmental learning in there.
 Now are we in the right path towards DI?
 
