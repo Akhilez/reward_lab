@@ -38,9 +38,21 @@ Learn the composer framework and create the basic locomotion env.~~
 
 With this, we end part 1. Fuck yeah!
 
+----------------
+
+Part 1.5: Exploration
+
+Building a basic robot may be trivial. But now that the foundation is established,
+we can explore the possibilities of robotics RL!
+One quick task could be simply to walk to a target.
+But then you can explore the degrees of freedom,
+sensor types like camera, touch, accel, gyro, etc,
+actuator types like velocity, static, motor, etc.
+Tasks can be varied. Like a moving target, pressing buttons, jumping, running, etc. 
 
 -----------------
 Part 2: Evolution
+
 Now that we have an RL env, can we manipulate the genotype of the robots and run a large evolutionary algorithm?
 
 

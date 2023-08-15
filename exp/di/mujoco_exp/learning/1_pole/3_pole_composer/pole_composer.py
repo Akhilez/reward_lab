@@ -42,7 +42,8 @@ def build_pole():
         pos=[0, 0, 0.1],
         axis=[0, 1, 0],
         damping=0.1,
-        range=[-360, 360],
+        range=[-6.28, 6.28],
+        # range=[-360, 360],
         limited=True,
     )
 
