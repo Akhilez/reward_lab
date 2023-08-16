@@ -40,7 +40,7 @@ With this, we end part 1. Fuck yeah!
 
 ----------------
 
-Part 1.5: Exploration
+Part 2: Exploration
 
 Building a basic robot may be trivial. But now that the foundation is established,
 we can explore the possibilities of robotics RL!
@@ -51,14 +51,12 @@ actuator types like velocity, static, motor, etc.
 Tasks can be varied. Like a moving target, pressing buttons, jumping, running, etc. 
 
 -----------------
-Part 2: Evolution
-
-Now that we have an RL env, can we manipulate the genotype of the robots and run a large evolutionary algorithm?
-
+Part 3.1: Brain Inspired Modules
 
 -----------------
-Part 3: Brain Inspired Modules
+Part 3.2: Evolution
 
+Now that we have an RL env, can we manipulate the genotype of the robots and run a large evolutionary algorithm?
 
 -----------------
 Part 4: First baby step of DI
