@@ -8,7 +8,7 @@ from gymnasium import Env, spaces
 
 
 class Crawler(Entity):
-    def _build(self, n_legs=3):
+    def _build(self, n_legs=4):
         self._rgba = (0.5, 0.8, 0.8, 1)
         self._size = 0.1
 
@@ -40,7 +40,7 @@ class Crawler(Entity):
         model.default.geom.type = "capsule"
         model.default.geom.rgba = self._rgba
         model.default.position.ctrllimited = True
-        model.default.position.ctrlrange = (-1, 1)
+        model.default.position.ctrlrange = (-0.5, 0.5)
 
         # Thigh:
         thigh = model.worldbody.add("body", name="thigh")
@@ -72,7 +72,7 @@ class Crawler(Entity):
 
 
 class WalkToTargetTask(Task):
-    NUM_SUBSTEPS = 25  # The number of physics substeps per control timestep.
+    NUM_SUBSTEPS = 50  # The number of physics substeps per control timestep.
 
     def __init__(self):
         self._arena = Floor()
@@ -93,7 +93,10 @@ class WalkToTargetTask(Task):
 
         def vector_to_target(physics):
             target_pos = physics.bind(self._target_site).pos
-            return self.crawler.global_vector_to_local_frame(physics, target_pos)[:2]
+            # return self.crawler.global_vector_to_local_frame(physics, target_pos)[:2]
+            # local_vector = self.roller.global_vector_to_local_frame(physics, target_pos)
+            roller_pos, _ = self.crawler.get_pose(physics)
+            return roller_pos - target_pos
 
         self._vec2target_observable = Generic(vector_to_target)
 
@@ -108,9 +111,9 @@ class WalkToTargetTask(Task):
     def get_reward(self, physics):
         pos = self._vec2target_observable(physics)
         distance = (pos ** 2).sum() ** 0.5
-        initial = 0.50
-        reward = (initial - distance) / initial
-        return reward
+        # initial = 0.50
+        # reward = (initial - distance) / initial
+        return -distance
 
     def initialize_episode(self, physics, random_state):
         self.crawler.set_pose(physics, position=(0, 0, 0.2))
@@ -131,13 +134,22 @@ class WalkToTargetEnv(Env):
 
     @property
     def action_space(self):
-        return spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)
+        spec = self.env.action_spec()
+        return spaces.Box(
+            low=0,
+            high=1,
+            shape=spec.shape,
+            dtype=np.float32,
+        )
 
     @property
     def observation_space(self):
-        return spaces.Box(low=-9999999, high=9999999, shape=(14,), dtype=np.float32)
+        spec = self.env.observation_spec()
+        shape = sum([v.shape[-1] for v in spec.values()])
+        return spaces.Box(low=-9999999, high=9999999, shape=(shape,), dtype=np.float32)
 
     def step(self, actions):
+        actions = self._normalize_actions(actions)
         self.timestep = self.env.step(actions)
         terminated = self.timestep.reward > 0.9
         return self.observe(), self.timestep.reward, terminated, False, {}
@@ -149,15 +161,20 @@ class WalkToTargetEnv(Env):
 
     def observe(self):
         keys = [
-            'vector_to_target',
-            'crawler/joint_positions',
-            'crawler/joint_velocities',
+            "vector_to_target",
+            "crawler/joint_positions",
+            "crawler/joint_velocities",
         ]
         obs = np.concatenate([self.timestep.observation[k].flatten() for k in keys], axis=0, dtype=np.float32)
         return obs
 
     def render(self):
         return self.env.physics.render()
+
+    def _normalize_actions(self, actions):
+        spec = self.env.action_spec()
+        actions = spec.minimum + (spec.maximum - spec.minimum) * actions
+        return actions
 
 
 def test_gym_env():
@@ -193,11 +210,11 @@ def test_dm_env():
 
     env = Environment(WalkToTargetTask())
 
-    print(f'{env.action_spec()=}')
-    print(f'{env.observation_spec()=}')
+    print(f"{env.action_spec()=}")
+    print(f"{env.observation_spec()=}")
 
     time_step = env.reset()
-    print(f'{time_step=}')
+    print(f"{time_step=}")
 
     duration = 2  # Seconds
     framerate = 30
@@ -229,5 +246,6 @@ def test_dm_env():
     plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_dm_env()
+    test_gym_env()

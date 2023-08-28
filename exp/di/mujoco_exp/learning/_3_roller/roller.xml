@@ -1,0 +1,39 @@
+<mujoco model="floor">
+  <compiler boundmass="1.0000000000000001e-05" boundinertia="9.9999999999999994e-12" coordinate="local" angle="degree" eulerseq="xyz"/>
+  <option timestep="0.002" cone="elliptic" noslip_iterations="5" noslip_tolerance="0"/>
+  <visual>
+    <headlight ambient="0.40000000000000002 0.40000000000000002 0.40000000000000002" diffuse="0.80000000000000004 0.80000000000000004 0.80000000000000004" specular="0.10000000000000001 0.10000000000000001 0.10000000000000001"/>
+    <map znear="0.01"/>
+    <scale forcewidth="0.01" contactwidth="0.059999999999999998" contactheight="0.01" jointwidth="0.01" framelength="0.29999999999999999" framewidth="0.01"/>
+  </visual>
+  <default>
+    <default class="/"/>
+    <default class="roller/"/>
+  </default>
+  <asset>
+    <texture name="groundplane" type="2d" builtin="checker" rgb1="0.20000000000000001 0.29999999999999999 0.40000000000000002" rgb2="0.10000000000000001 0.20000000000000001 0.29999999999999999" mark="edge" markrgb="0.80000000000000004 0.80000000000000004 0.80000000000000004" width="200" height="200"/>
+    <material name="groundplane" class="/" texture="groundplane" texrepeat="2 2" texuniform="true" reflectance="0.20000000000000001"/>
+  </asset>
+  <worldbody>
+    <geom name="groundplane" class="/" type="plane" size="8 8 0.25" material="groundplane"/>
+    <camera name="top_camera" class="/" fovy="10.058147163570894" pos="0 0 100" quat="1 0 0 0"/>
+    <light name="//unnamed_light_0" class="/" pos="0 0 4"/>
+    <body name="roller/">
+      <freejoint name="roller/"/>
+      <geom name="roller/torso" class="roller/" type="box" size="0.10000000000000001 0.14999999999999999 0.029999999999999999" rgba="0.75 1 0.75 1" mass="0.5" pos="0 0.14999999999999999 0"/>
+      <body name="roller/left_wheel" pos="-0.14999999999999999 0 0">
+        <joint name="roller/left_wheel_joint" class="roller/" type="hinge" axis="1 0 0" damping="1.5"/>
+        <geom name="roller/left_tyre" class="roller/" type="cylinder" size="0.10000000000000001 0.050000000000000003" rgba="1 0.75 0.75 1" mass="0.10000000000000001" euler="0 90 0"/>
+      </body>
+      <body name="roller/right_wheel" pos="0.14999999999999999 0 0">
+        <joint name="roller/right_wheel_joint" class="roller/" type="hinge" axis="1 0 0" damping="1.5"/>
+        <geom name="roller/right_tyre" class="roller/" type="cylinder" size="0.10000000000000001 0.050000000000000003" rgba="0.75 0.75 1 1" mass="0.10000000000000001" euler="0 90 0"/>
+      </body>
+    </body>
+    <site name="target_site" class="/" type="sphere" rgba="1 0.20000000000000001 0.20000000000000001 1" size="0.10000000000000001 0.10000000000000001 0.10000000000000001" pos="0.5 0 0.10000000000000001"/>
+  </worldbody>
+  <actuator>
+    <velocity name="roller/left_motor" class="roller/" ctrllimited="true" ctrlrange="-5 5" joint="roller/left_wheel_joint"/>
+    <velocity name="roller/right_motor" class="roller/" ctrllimited="true" ctrlrange="-5 5" joint="roller/right_wheel_joint"/>
+  </actuator>
+</mujoco>

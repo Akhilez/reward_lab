@@ -1,0 +1,28 @@
+<mujoco>
+	<option gravity="0 0 -9" viscosity="0.1" wind="0 0 0" />
+  <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 7" dir="0 0 -1"/>
+    <geom type="plane" size="1 1 0.1" rgba=".9 0.9 0.9 1"/>
+    <body name="roller" pos="0 0 0.15">
+      <freejoint/>
+      <geom type="box" size="0.1 0.15 0.03" mass="0.5" rgba="0.75 1 0.75 1.0"
+            pos="0 0.15 0"/>
+
+      <body pos="-0.15 0 0" name="left_wheel">
+          <joint type="hinge" name="left_wheel_joint" axis="1 0 0" damping="1.5"/>
+          <geom name="left_tyre" type="cylinder" size="0.1 0.05" euler="0 90 0" mass="0.1"
+                rgba="1 0.75 0.75 1.0"/>
+      </body>
+
+      <body pos="0.15 0 0" name="right_wheel">
+          <joint type="hinge" name="right_wheel_joint" axis="1 0 0" damping="1.5"/>
+          <geom name="right_tyre" type="cylinder" size="0.1 0.05" euler="0 90 0" mass="0.1" rgba="0.75 0.75 1.0 1.0"/>
+      </body>
+
+    </body>
+  </worldbody>
+  <actuator>
+    <velocity name="left_motor" joint="left_wheel_joint" ctrllimited="true" ctrlrange="-5 5" />
+    <velocity name="right_motor" joint="right_wheel_joint" ctrllimited="true" ctrlrange="-5 5" />
+  </actuator>
+</mujoco>

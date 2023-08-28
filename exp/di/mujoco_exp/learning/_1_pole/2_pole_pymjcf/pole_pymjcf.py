@@ -64,7 +64,7 @@ def build_mjcf():
     return arena
 
 
-# physics = mujoco.Physics.from_xml_path("/Users/akhildevarashetti/code/reward_lab/exp/di/mujoco_exp/learning/1_pole/pole.xml")
+# physics = mujoco.Physics.from_xml_path("/Users/akhildevarashetti/code/reward_lab/exp/di/mujoco_exp/learning/_1_pole/pole.xml")
 arena = build_mjcf()
 physics = mjcf.Physics.from_mjcf_model(arena)
 

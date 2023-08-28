@@ -18,7 +18,7 @@ scene_option.frame = enums.mjtFrame.mjFRAME_GEOM
 scene_option.flags[enums.mjtVisFlag.mjVIS_TRANSPARENT] = True
 
 
-physics = mujoco.Physics.from_xml_path("/Users/akhildevarashetti/code/reward_lab/exp/di/mujoco_exp/learning/1_pole/pole.xml")
+physics = mujoco.Physics.from_xml_path("/exp/di/mujoco_exp/learning/_1_pole/pole.xml")
 
 plot_data = {
     'end_x': [],
