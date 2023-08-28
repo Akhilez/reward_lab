@@ -1,7 +1,8 @@
 import numpy as np
-from dm_control.composer import Entity, Observables, observable, Task, Environment
+from dm_control.composer import Entity, Observables, observable, Task, Environment, variation
 from dm_control.composer.observation.observable import MJCFFeature, Generic
 from dm_control.locomotion.arenas import Floor
+from dm_control.composer.variation import distributions, noises
 from dm_control.mjcf import RootElement
 from gymnasium.utils.env_checker import check_env
 from gymnasium import Env, spaces
@@ -71,6 +72,20 @@ class Crawler(Entity):
             return MJCFFeature("qvel", self._entity.mjcf_model.find_all("joint"))
 
 
+class UniformCircle(variation.Variation):
+    """A uniformly sampled horizontal point on a circle of radius `distance`."""
+
+    # Akhil: Basically sampling from a 2D donut.
+
+    def __init__(self, distance):
+        self._distance = distance  # Akhil: Depth of the donut
+        self._heading = distributions.Uniform(0, 2 * np.pi)  # Akhil: Angle (line in cricket bowling)
+
+    def __call__(self, initial_value=None, current_value=None, random_state=None):
+        distance, heading = variation.evaluate((self._distance, self._heading), random_state=random_state)
+        return distance * np.cos(heading), distance * np.sin(heading), 0
+
+
 class WalkToTargetTask(Task):
     NUM_SUBSTEPS = 50  # The number of physics substeps per control timestep.
 
@@ -111,12 +126,12 @@ class WalkToTargetTask(Task):
     def get_reward(self, physics):
         pos = self._vec2target_observable(physics)
         distance = (pos ** 2).sum() ** 0.5
-        # initial = 0.50
-        # reward = (initial - distance) / initial
         return -distance
 
     def initialize_episode(self, physics, random_state):
         self.crawler.set_pose(physics, position=(0, 0, 0.2))
+        target_pos = variation.evaluate(UniformCircle(distributions.Uniform(0.5, 0.75)))
+        physics.bind(self._target_site).pos = target_pos
 
     @property
     def task_observables(self):
