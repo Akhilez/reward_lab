@@ -98,4 +98,7 @@
     <position name="crawler/leg_3/hip_joint" class="crawler/leg_3/" joint="crawler/leg_3//unnamed_joint_0" kp="10"/>
     <position name="crawler/leg_3/knee_joint" class="crawler/leg_3/" joint="crawler/leg_3//unnamed_joint_1" kp="10"/>
   </actuator>
+  <sensor>
+    <framequat name="crawler/orientation" objtype="geom" objname="crawler/torso"/>
+  </sensor>
 </mujoco>

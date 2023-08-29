@@ -3,7 +3,7 @@ from dm_control.composer import Entity, Observables, observable, Task, Environme
 from dm_control.composer.observation.observable import MJCFFeature, Generic
 from dm_control.locomotion.arenas import Floor
 from dm_control.composer.variation import distributions, noises
-from dm_control.mjcf import RootElement
+from dm_control.mjcf import RootElement, get_attachment_frame
 from gymnasium.utils.env_checker import check_env
 from gymnasium import Env, spaces
 
@@ -14,7 +14,7 @@ class Crawler(Entity):
         self._size = 0.1
 
         self._model = RootElement(model="crawler")
-        self._model.worldbody.add(
+        self._torso = self._model.worldbody.add(
             "geom",
             name="torso",
             type="ellipsoid",
@@ -28,9 +28,18 @@ class Crawler(Entity):
             site = self._model.worldbody.add("site", pos=pos, euler=[0, 0, theta])
             site.attach(self._build_leg())
 
+        self._orientation = self._model.sensor.add(
+            "framequat", name="orientation", objtype="geom", objname=self._torso
+        )
+
     @property
     def mjcf_model(self):
         return self._model
+
+    @property
+    def orientation(self):
+        """Ground truth orientation sensor."""
+        return self._orientation
 
     def _build_leg(self):
         model = RootElement(model="leg")
@@ -71,6 +80,10 @@ class Crawler(Entity):
         def joint_velocities(self):
             return MJCFFeature("qvel", self._entity.mjcf_model.find_all("joint"))
 
+        @observable
+        def orientation(self):
+            return MJCFFeature("sensordata", self._entity.orientation)
+
 
 class UniformCircle(variation.Variation):
     """A uniformly sampled horizontal point on a circle of radius `distance`."""
@@ -110,13 +123,14 @@ class WalkToTargetTask(Task):
             target_pos = physics.bind(self._target_site).pos
             # return self.crawler.global_vector_to_local_frame(physics, target_pos)[:2]
             # local_vector = self.roller.global_vector_to_local_frame(physics, target_pos)
-            roller_pos, _ = self.crawler.get_pose(physics)
-            return roller_pos - target_pos
+            roller_pos, roller_quat = self.crawler.get_pose(physics)
+            return target_pos - roller_pos
 
         self._vec2target_observable = Generic(vector_to_target)
 
         self.crawler.observables.joint_positions.enabled = True
         self.crawler.observables.joint_velocities.enabled = True
+        self.crawler.observables.orientation.enabled = True
         self._vec2target_observable.enabled = True
 
     @property
@@ -179,6 +193,7 @@ class WalkToTargetEnv(Env):
             "vector_to_target",
             "crawler/joint_positions",
             "crawler/joint_velocities",
+            "crawler/orientation",
         ]
         obs = np.concatenate([self.timestep.observation[k].flatten() for k in keys], axis=0, dtype=np.float32)
         return obs
