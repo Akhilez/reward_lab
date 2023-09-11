@@ -24,11 +24,6 @@
       <geom type="capsule" rgba="0.5 0.80000000000000004 0.80000000000000004 1"/>
       <position ctrllimited="true" ctrlrange="-0.5 0.5"/>
     </default>
-    <default class="crawler/leg_3/">
-      <joint type="hinge" damping="2"/>
-      <geom type="capsule" rgba="0.5 0.80000000000000004 0.80000000000000004 1"/>
-      <position ctrllimited="true" ctrlrange="-0.5 0.5"/>
-    </default>
   </default>
   <asset>
     <texture name="groundplane" type="2d" builtin="checker" rgb1="0.20000000000000001 0.29999999999999999 0.40000000000000002" rgb2="0.10000000000000001 0.20000000000000001 0.29999999999999999" mark="edge" markrgb="0.80000000000000004 0.80000000000000004 0.80000000000000004" width="200" height="200"/>
@@ -52,8 +47,8 @@
           </body>
         </body>
       </body>
-      <site name="crawler//unnamed_site_1" class="crawler/" pos="6.1232339957367663e-18 0.10000000000000001 0" euler="0 0 1.5707963267948966"/>
-      <body pos="6.1232339957367663e-18 0.10000000000000001 0" euler="0 0 1.5707963267948966" name="crawler/leg_1/">
+      <site name="crawler//unnamed_site_1" class="crawler/" pos="-0.049999999999999989 0.086602540378443879 0" euler="0 0 2.0943951023931953"/>
+      <body pos="-0.049999999999999989 0.086602540378443879 0" euler="0 0 2.0943951023931953" name="crawler/leg_1/">
         <body name="crawler/leg_1/thigh">
           <joint name="crawler/leg_1//unnamed_joint_0" class="crawler/leg_1/" axis="0 0 1"/>
           <geom name="crawler/leg_1//unnamed_geom_0" class="crawler/leg_1/" size="0.025000000000000001" fromto="0 0 0 0.10000000000000001 0 0"/>
@@ -63,25 +58,14 @@
           </body>
         </body>
       </body>
-      <site name="crawler//unnamed_site_2" class="crawler/" pos="-0.10000000000000001 1.2246467991473533e-17 0" euler="0 0 3.1415926535897931"/>
-      <body pos="-0.10000000000000001 1.2246467991473533e-17 0" euler="0 0 3.1415926535897931" name="crawler/leg_2/">
+      <site name="crawler//unnamed_site_2" class="crawler/" pos="-0.050000000000000044 -0.086602540378443837 0" euler="0 0 4.1887902047863905"/>
+      <body pos="-0.050000000000000044 -0.086602540378443837 0" euler="0 0 4.1887902047863905" name="crawler/leg_2/">
         <body name="crawler/leg_2/thigh">
           <joint name="crawler/leg_2//unnamed_joint_0" class="crawler/leg_2/" axis="0 0 1"/>
           <geom name="crawler/leg_2//unnamed_geom_0" class="crawler/leg_2/" size="0.025000000000000001" fromto="0 0 0 0.10000000000000001 0 0"/>
           <body name="crawler/leg_2/shin" pos="0.10000000000000001 0 0">
             <joint name="crawler/leg_2//unnamed_joint_1" class="crawler/leg_2/" axis="0 1 0"/>
             <geom name="crawler/leg_2//unnamed_geom_1" class="crawler/leg_2/" size="0.02" fromto="0 0 0 0 0 -0.10000000000000001"/>
-          </body>
-        </body>
-      </body>
-      <site name="crawler//unnamed_site_3" class="crawler/" pos="-1.8369701987210297e-17 -0.10000000000000001 0" euler="0 0 4.7123889803846897"/>
-      <body pos="-1.8369701987210297e-17 -0.10000000000000001 0" euler="0 0 4.7123889803846897" name="crawler/leg_3/">
-        <body name="crawler/leg_3/thigh">
-          <joint name="crawler/leg_3//unnamed_joint_0" class="crawler/leg_3/" axis="0 0 1"/>
-          <geom name="crawler/leg_3//unnamed_geom_0" class="crawler/leg_3/" size="0.025000000000000001" fromto="0 0 0 0.10000000000000001 0 0"/>
-          <body name="crawler/leg_3/shin" pos="0.10000000000000001 0 0">
-            <joint name="crawler/leg_3//unnamed_joint_1" class="crawler/leg_3/" axis="0 1 0"/>
-            <geom name="crawler/leg_3//unnamed_geom_1" class="crawler/leg_3/" size="0.02" fromto="0 0 0 0 0 -0.10000000000000001"/>
           </body>
         </body>
       </body>
@@ -95,10 +79,10 @@
     <position name="crawler/leg_1/knee_joint" class="crawler/leg_1/" joint="crawler/leg_1//unnamed_joint_1" kp="10"/>
     <position name="crawler/leg_2/hip_joint" class="crawler/leg_2/" joint="crawler/leg_2//unnamed_joint_0" kp="10"/>
     <position name="crawler/leg_2/knee_joint" class="crawler/leg_2/" joint="crawler/leg_2//unnamed_joint_1" kp="10"/>
-    <position name="crawler/leg_3/hip_joint" class="crawler/leg_3/" joint="crawler/leg_3//unnamed_joint_0" kp="10"/>
-    <position name="crawler/leg_3/knee_joint" class="crawler/leg_3/" joint="crawler/leg_3//unnamed_joint_1" kp="10"/>
   </actuator>
   <sensor>
     <framequat name="crawler/orientation" objtype="geom" objname="crawler/torso"/>
+    <framelinvel name="crawler/linear_velocity" objtype="geom" objname="crawler/torso"/>
+    <frameangvel name="crawler/angular_velocity" objtype="geom" objname="crawler/torso"/>
   </sensor>
 </mujoco>

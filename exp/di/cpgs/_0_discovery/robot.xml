@@ -1,0 +1,104 @@
+<mujoco model="floor">
+  <compiler boundmass="1.0000000000000001e-05" boundinertia="9.9999999999999994e-12" coordinate="local" angle="degree" eulerseq="xyz"/>
+  <option timestep="0.002" cone="elliptic" noslip_iterations="5" noslip_tolerance="0"/>
+  <visual>
+    <headlight ambient="0.40000000000000002 0.40000000000000002 0.40000000000000002" diffuse="0.80000000000000004 0.80000000000000004 0.80000000000000004" specular="0.10000000000000001 0.10000000000000001 0.10000000000000001"/>
+    <map znear="0.01"/>
+    <scale forcewidth="0.01" contactwidth="0.059999999999999998" contactheight="0.01" jointwidth="0.01" framelength="0.29999999999999999" framewidth="0.01"/>
+  </visual>
+  <default>
+    <default class="/"/>
+    <default class="crawler/"/>
+    <default class="crawler/leg/">
+      <joint type="hinge" damping="2"/>
+      <geom type="capsule" rgba="0.5 0.8 0.8 1"/>
+      <position ctrllimited="true" ctrlrange="-0.5 0.5"/>
+    </default>
+    <default class="crawler/leg_1/">
+      <joint type="hinge" damping="2"/>
+      <geom type="capsule" rgba="0.5 0.80000000000000004 0.80000000000000004 1"/>
+      <position ctrllimited="true" ctrlrange="-0.5 0.5"/>
+    </default>
+    <default class="crawler/leg_2/">
+      <joint type="hinge" damping="2"/>
+      <geom type="capsule" rgba="0.5 0.80000000000000004 0.80000000000000004 1"/>
+      <position ctrllimited="true" ctrlrange="-0.5 0.5"/>
+    </default>
+  </default>
+  <asset>
+    <texture name="groundplane" type="2d" builtin="checker" rgb1="0.20000000000000001 0.29999999999999999 0.40000000000000002" rgb2="0.10000000000000001 0.20000000000000001 0.29999999999999999" mark="edge" markrgb="0.80000000000000004 0.80000000000000004 0.80000000000000004" width="200" height="200"/>
+    <material name="groundplane" class="/" texture="groundplane" texrepeat="2 2" texuniform="true" reflectance="0.20000000000000001"/>
+  </asset>
+  <worldbody>
+    <geom name="groundplane" class="/" type="plane" size="8 8 0.25" material="groundplane"/>
+    <camera name="top_camera" class="/" fovy="10.058147163570894" pos="0 0 100" quat="1 0 0 0"/>
+    <light name="//unnamed_light_0" class="/" pos="0 0 4"/>
+    <body name="crawler/" pos="0 0 0.3">
+      <freejoint name="crawler/"/>
+
+      <geom name="crawler/backbone" class="crawler/" type="cylinder" size="0.03 0.3 0.1" rgba="0.8 0.5 0.5 1" euler="0 90 0"/>
+
+      <body pos="-0.3 0 0">
+        <geom name="crawler/head" class="crawler/" type="sphere" size="0.1" pos="0 0 0" rgba="0.5 0.8 0.5 1"/>
+
+        <body pos="0 0.1 0" euler="0 0 90" name="crawler/leg/">
+          <joint name="crawler/leg//unnamed_joint_0" class="crawler/leg/" axis="0 0 1"/>
+          <geom name="crawler/leg//unnamed_geom_0" class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.8 0.5 0.5 1"/>
+          <body name="crawler/leg/shin" pos="0.15 0 0">
+            <joint name="crawler/leg//unnamed_joint_1" class="crawler/leg/" axis="0 1 0"/>
+            <geom name="crawler/leg//unnamed_geom_1" class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.5 0.8 0.5 1"/>
+            <body name="crawler/leg/feet" pos="0.15 0 0">
+              <joint name="crawler/leg/feet/unnamed_joint_1" class="crawler/leg/" axis="0 1 0"/>
+              <geom name="crawler/leg/feet/unnamed_geom_1" class="crawler/leg/" size="0.03" fromto="0 0 0 0 0 -0.15"/>
+            </body>
+          </body>
+        </body>
+
+        <body pos="0 -0.1 0" euler="0 0 -90">
+          <joint class="crawler/leg/" axis="0 0 1"/>
+          <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.8 0.5 0.5 1"/>
+          <body  pos="0.15 0 0">
+            <joint class="crawler/leg/" axis="0 1 0"/>
+            <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.5 0.8 0.5 1"/>
+            <body pos="0.15 0 0">
+              <joint class="crawler/leg/" axis="0 1 0"/>
+              <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0 0 -0.15"/>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <body pos="0.3 0 0">
+        <geom name="crawler/tail" class="crawler/" type="sphere" size="0.1" rgba="0.5 0.8 0.5 1"/>
+
+        <body pos="0 0.1 0" euler="0 0 90">
+          <joint class="crawler/leg/" axis="0 0 1"/>
+          <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.8 0.5 0.5 1"/>
+          <body  pos="0.15 0 0">
+            <joint class="crawler/leg/" axis="0 1 0"/>
+            <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.5 0.8 0.5 1"/>
+            <body pos="0.15 0 0">
+              <joint class="crawler/leg/" axis="0 1 0"/>
+              <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0 0 -0.15"/>
+            </body>
+          </body>
+        </body>
+
+        <body pos="0 -0.1 0" euler="0 0 -90">
+          <joint class="crawler/leg/" axis="0 0 1"/>
+          <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.8 0.5 0.5 1"/>
+          <body  pos="0.15 0 0">
+            <joint class="crawler/leg/" axis="0 1 0"/>
+            <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0.15 0 0" rgba="0.5 0.8 0.5 1"/>
+            <body pos="0.15 0 0">
+              <joint class="crawler/leg/" axis="0 1 0"/>
+              <geom class="crawler/leg/" size="0.03" fromto="0 0 0 0 0 -0.15"/>
+            </body>
+          </body>
+        </body>
+
+      </body>
+
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,3 +1,5 @@
+from random import random
+
 import numpy as np
 from dm_control.composer import Entity, Observables, observable, Task, Environment, variation
 from dm_control.composer.observation.observable import MJCFFeature, Generic
@@ -9,7 +11,7 @@ from gymnasium import Env, spaces
 
 
 class Crawler(Entity):
-    def _build(self, n_legs=4):
+    def _build(self, n_legs=3):
         self._rgba = (0.5, 0.8, 0.8, 1)
         self._size = 0.1
 
@@ -28,8 +30,12 @@ class Crawler(Entity):
             site = self._model.worldbody.add("site", pos=pos, euler=[0, 0, theta])
             site.attach(self._build_leg())
 
-        self._orientation = self._model.sensor.add(
-            "framequat", name="orientation", objtype="geom", objname=self._torso
+        self._orientation = self._model.sensor.add("framequat", name="orientation", objtype="geom", objname=self._torso)
+        self._linear_velocity = self._model.sensor.add(
+            "framelinvel", name="linear_velocity", objtype="geom", objname=self._torso
+        )
+        self._angular_velocity = self._model.sensor.add(
+            "frameangvel", name="angular_velocity", objtype="geom", objname=self._torso
         )
 
     @property
@@ -40,6 +46,16 @@ class Crawler(Entity):
     def orientation(self):
         """Ground truth orientation sensor."""
         return self._orientation
+
+    @property
+    def linear_velocity(self):
+        """Ground truth orientation sensor."""
+        return self._linear_velocity
+
+    @property
+    def angular_velocity(self):
+        """Ground truth orientation sensor."""
+        return self._angular_velocity
 
     def _build_leg(self):
         model = RootElement(model="leg")
@@ -83,6 +99,14 @@ class Crawler(Entity):
         @observable
         def orientation(self):
             return MJCFFeature("sensordata", self._entity.orientation)
+
+        @observable
+        def linear_velocity(self):
+            return MJCFFeature("sensordata", self._entity.linear_velocity)
+
+        @observable
+        def angular_velocity(self):
+            return MJCFFeature("sensordata", self._entity.angular_velocity)
 
 
 class UniformCircle(variation.Variation):
@@ -131,6 +155,8 @@ class WalkToTargetTask(Task):
         self.crawler.observables.joint_positions.enabled = True
         self.crawler.observables.joint_velocities.enabled = True
         self.crawler.observables.orientation.enabled = True
+        # self.crawler.observables.linear_velocity.enabled = True
+        # self.crawler.observables.angular_velocity.enabled = True
         self._vec2target_observable.enabled = True
 
     @property
@@ -140,10 +166,23 @@ class WalkToTargetTask(Task):
     def get_reward(self, physics):
         pos = self._vec2target_observable(physics)
         distance = (pos ** 2).sum() ** 0.5
-        return -distance
+        velocity_linear, velocity_angular = self.crawler.get_velocity(physics)
+        joint_pos = self.crawler.observables.joint_positions(physics)
+        joint_pos_penalty = (joint_pos ** 2).sum() ** 0.5
+        height = self.crawler.get_pose(physics)[0][2]
+        return (
+            - 5.0 * distance
+            + 2.0 * np.linalg.norm(velocity_linear)
+            - 0.5 * np.linalg.norm(velocity_angular)
+            - 1e-3 * joint_pos_penalty
+            - 5.0 * height
+        )
 
     def initialize_episode(self, physics, random_state):
-        self.crawler.set_pose(physics, position=(0, 0, 0.2))
+        # Set random angle on z axis  # https://quaternions.online/
+        self.crawler.set_pose(
+            physics, position=(random(), random(), 0.2), quaternion=(random(), 0, 0, random() * 2 - 1)
+        )
         target_pos = variation.evaluate(UniformCircle(distributions.Uniform(0.5, 0.75)))
         physics.bind(self._target_site).pos = target_pos
 
@@ -180,7 +219,7 @@ class WalkToTargetEnv(Env):
     def step(self, actions):
         actions = self._normalize_actions(actions)
         self.timestep = self.env.step(actions)
-        terminated = self.timestep.reward > 0.9
+        terminated = False  # self.timestep.reward > 0.9
         return self.observe(), self.timestep.reward, terminated, False, {}
 
     def reset(self, *, seed=None, options=None):
