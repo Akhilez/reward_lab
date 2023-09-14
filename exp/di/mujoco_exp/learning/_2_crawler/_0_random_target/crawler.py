@@ -1,4 +1,5 @@
 from random import random
+from typing import Any
 
 import numpy as np
 from dm_control.composer import Entity, Observables, observable, Task, Environment, variation
@@ -6,6 +7,7 @@ from dm_control.composer.observation.observable import MJCFFeature, Generic
 from dm_control.locomotion.arenas import Floor
 from dm_control.composer.variation import distributions, noises
 from dm_control.mjcf import RootElement, get_attachment_frame
+from gymnasium.envs.registration import EnvSpec
 from gymnasium.utils.env_checker import check_env
 from gymnasium import Env, spaces
 
@@ -126,12 +128,12 @@ class UniformCircle(variation.Variation):
 class WalkToTargetTask(Task):
     NUM_SUBSTEPS = 50  # The number of physics substeps per control timestep.
 
-    def __init__(self):
+    def __init__(self, n_legs=3):
         self._arena = Floor()
         self._arena.mjcf_model.worldbody.add("light", pos=(0, 0, 4))
         self.control_timestep = self.NUM_SUBSTEPS * self.physics_timestep
 
-        self.crawler = Crawler()
+        self.crawler = Crawler(n_legs)
         self._arena.add_free_entity(self.crawler)
 
         self._target_site = self._arena.mjcf_model.worldbody.add(
@@ -171,20 +173,25 @@ class WalkToTargetTask(Task):
         joint_pos_penalty = (joint_pos ** 2).sum() ** 0.5
         height = self.crawler.get_pose(physics)[0][2]
         return (
-            - 5.0 * distance
-            + 2.0 * np.linalg.norm(velocity_linear)
-            - 0.5 * np.linalg.norm(velocity_angular)
-            - 1e-3 * joint_pos_penalty
-            - 5.0 * height
+            -5.0 * distance
+            # + 2.0 * np.linalg.norm(velocity_linear)
+            # - 0.5 * np.linalg.norm(velocity_angular)
+            # - 1e-3 * joint_pos_penalty
+            # - 5.0 * height
         )
 
     def initialize_episode(self, physics, random_state):
         # Set random angle on z axis  # https://quaternions.online/
         self.crawler.set_pose(
-            physics, position=(random(), random(), 0.2), quaternion=(random(), 0, 0, random() * 2 - 1)
+            physics,
+            # position=(random(), random(), 0.2),
+            position=(0, 0, 0.2),
+            # quaternion=(random(), 0, 0, random() * 2 - 1),
+            # quaternion=(random(), 0, 0, random() * 2 - 1),
         )
         target_pos = variation.evaluate(UniformCircle(distributions.Uniform(0.5, 0.75)))
         physics.bind(self._target_site).pos = target_pos
+        # physics.bind(self._target_site).pos = (-0.5, -0.5, 0.1)
 
     @property
     def task_observables(self):
@@ -195,9 +202,11 @@ class WalkToTargetEnv(Env):
     reward_range = (-float("inf"), float("inf"))
     max_episode_steps = 64
     # spec: EnvSpec | None = None
+    metadata: dict[str, Any] = {"render_modes": ['rgb_array']}
+    render_mode = 'rgb_array'
 
-    def __init__(self):
-        self.env = Environment(WalkToTargetTask())
+    def __init__(self, n_legs=3):
+        self.env = Environment(WalkToTargetTask(n_legs))
         self.timestep = None
 
     @property
