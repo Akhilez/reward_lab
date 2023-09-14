@@ -189,7 +189,7 @@ class WalkToTargetTask(Task):
             # quaternion=(random(), 0, 0, random() * 2 - 1),
             # quaternion=(random(), 0, 0, random() * 2 - 1),
         )
-        target_pos = variation.evaluate(UniformCircle(distributions.Uniform(0.5, 0.75)))
+        target_pos = variation.evaluate(UniformCircle(distributions.Uniform(0.5, 0.5)))
         physics.bind(self._target_site).pos = target_pos
         # physics.bind(self._target_site).pos = (-0.5, -0.5, 0.1)
 
