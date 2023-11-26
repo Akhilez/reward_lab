@@ -1,6 +1,8 @@
 temp*
 *.mp4
 *.png
+*.json
+*.xml
 
 .idea/
 temp/
