@@ -26,10 +26,11 @@ def do_it_again():
 
     memory.observations.append(obs_embeddings)
 
-    for i in range(5):
+    for i in range(1):
         with torch.no_grad():
             obs_embeddings = memory.observations[-1]  # [1, 37, 64]
-            action_key = model.vocab["action_key"]  # [64,]
+            action_key = model.vocab["action_key"]  # int
+            action_key = model.embeddings(torch.tensor(action_key).unsqueeze(0))  # [1, 64]
             inputs = torch.cat([obs_embeddings, action_key.view(1, 1, -1)], dim=1)  # [1, 38, 64]
 
             # ----------------- Predict action -----------------
@@ -61,13 +62,16 @@ def do_it_again():
         action_embedding = action_embedding.unsqueeze(1)  # [1, 1, 64]
         memory.actions.append(action_embedding)
 
-        next_state_key = model.vocab["next_state_key"]  # [64,]
-        next_state_key = next_state_key.unsqueeze(0).unsqueeze(0)  # [1, 1, 64]
+        next_state_key = model.vocab["next_state_key"]  # int
+        next_state_key = model.embeddings(torch.tensor(next_state_key).unsqueeze(0))  # [1, 64]
+        next_state_key = next_state_key.unsqueeze(0)  # [1, 1, 64]
 
-        action_key = model.vocab["action_key"]  # [64,]
+        action_key = model.vocab["action_key"]  # int
+        action_key = model.embeddings(torch.tensor(action_key).unsqueeze(0))  # [1, 64]
         action_key = action_key.view(1, 1, -1)  # [1, 1, 64]
 
-        next_latent_obs_key = model.vocab["next_latent_obs_key"]  # [64,]
+        next_latent_obs_key = model.vocab["next_latent_obs_key"]  # int
+        next_latent_obs_key = model.embeddings(torch.tensor(next_latent_obs_key).unsqueeze(0))  # [1, 64]
         next_latent_obs_key = next_latent_obs_key.view(1, 1, -1)  # [1, 1, 64]
 
         # -------------- Predict next state -------------
@@ -127,13 +131,13 @@ def do_it_again():
 
         action_embedding_pred = latent_out[1:, -1:]  # [1, 1, 64]
         action_logits = model.classifier(action_embedding_pred)  # [1, n_classes]
-        action_logits = action_logits[:, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
+        action_logits = action_logits[:, :, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
         action_logits = torch.softmax(action_logits, dim=-1)  # [1, n_actions]
 
         obs2_latent_pred = latent_out[:1, -1:]  # [1, 1, 64]
 
         loss_latent = F.mse_loss(obs2_latent_pred, obs2_latent)
-        loss_action = F.cross_entropy(action_logits, action)
+        loss_action = F.cross_entropy(action_logits.squeeze(1), action)
 
         # --------------- Compute reward --------------
         reward_full_state = F.mse_loss(obs_next_pred, obs_next_embeddings)
@@ -147,7 +151,7 @@ def do_it_again():
             action_key,
             action_embedding,
             next_state_key,
-            obs_next_embeddings,
+            obs_next_embeddings[:, :-1],  # --> next emb
         ], dim=1)  # [1, 76, 64]
         # TODO: Create mask
 
@@ -156,10 +160,16 @@ def do_it_again():
             obs_embeddings,
             next_state_key,
             obs_next_embeddings,
-            action_key,
-            action_embedding,
+            action_key,  # --> action_embedding
         ], dim=1)  # [1, 76, 64]
         # TODO: Create mask
+
+        # TODO: Create padding
+        batch = torch.cat([seq_forward_dynamics, seq_inverse_dynamics], dim=0)  # [2, 76, 64]
+
+        outputs = model.transformer(batch)  # [2, 76, 64]
+
+        # -------------- Losses -------------
 
 
 
@@ -247,6 +257,6 @@ def do_it():
 
 
 if __name__ == "__main__":
-    do_it()
-
+    # do_it()
+    do_it_again()
 
