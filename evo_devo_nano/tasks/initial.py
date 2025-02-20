@@ -1,3 +1,29 @@
+"""
+
+- get initial obs
+- autoencoder backprop
+- push obs embeddings to memory.
+- Loop:
+    - Action to step:
+        - get latest obs embeddings from memory
+        - Predict next action
+        - Step
+    - Gather obs2 emb
+        - auto-encoder backprop
+    - Reward by forward and inverse dynamics
+        - Full state
+            - no grad predict next obs embeddings
+            - Calculate reward1 from obs2_emb and obs2_emb_pred
+        - Latent state
+            - BERT & latent embeddings of obs1 & obs2
+            - predict next action from latent
+            - predict latent obs2 from obs2 & action.
+            - Calculate reward2 from latent_obs2 and latent_obs2_pred
+    - Forward sequences
+    - Loss computation & backward
+
+
+"""
 import torch
 from torch.nn import functional as F
 
