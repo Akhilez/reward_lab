@@ -10,6 +10,7 @@ def do_it_again():
     memory = Memory(5)
     model = CraftaxModel(h=interaction.h, w=interaction.w, n_actions=interaction.n_actions)
 
+    # ----------------- Recon obs backprop -----------------
     model.train()
     obs = torch.tensor(interaction.obs)  # [64, 64, 3] (0-1)
     obs = obs.permute(2, 0, 1).unsqueeze(0)  # [1, 3, 64, 64]
@@ -31,37 +32,138 @@ def do_it_again():
             action_key = model.vocab["action_key"]  # [64,]
             inputs = torch.cat([obs_embeddings, action_key.view(1, 1, -1)], dim=1)  # [1, 38, 64]
 
+            # ----------------- Predict action -----------------
             model.transformer.eval()
             output_embeddings = model.transformer(inputs)  # [1, 38, 64]
-            action_logits = model.classifier(output_embeddings[:, -1, :])
-            action_logits = action_logits[:, torch.where(model.vocab.actions_mask)[0]]
+            action_logits = model.classifier(output_embeddings[:, -1, :])  # [1, n_classes]
+            action_logits = action_logits[:, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
             action_logits = torch.softmax(action_logits, dim=-1)
-            action = torch.multinomial(action_logits, num_samples=1)[0]
+            action = torch.multinomial(action_logits, num_samples=1)[0]  # [1]
 
+        # ------------ Step ---------------
         interaction.step(action[0].item())
 
-        # Phase 2
+
+        # ---------------- Recon next obs backprop --------------------
         model.train()
         obs_next = torch.tensor(interaction.obs)  # [64, 64, 3]
         obs_next = obs_next.permute(2, 0, 1).unsqueeze(0)  # [1, 3, 63, 63]
         obs_next_embeddings, reconstruction_next = model.obs_encoder(obs_next, return_reconstruction=True)
         loss_recon = F.mse_loss(reconstruction_next, obs_next)
+        # TODO: backprop
 
+        # -------------- Gather embeddings --------------
         obs_next_embeddings = obs_next_embeddings.detach()
-        obs_next_embeddings = model.time_encoder(obs_next_embeddings, timestep=i+1)
+        obs_next_embeddings = model.time_encoder(obs_next_embeddings, timestep=i + 1)
         memory.observations.append(obs_next_embeddings)
 
-        """
-        We have obs, a and onext.
-        now, we can create a few sequences to forward.
-        Primarily, we need reward from inverse and forward dynamics like ICM.
-        
-        Once we have the reward, we can create more sequences to forward. This is phase 3.
-        
-        Finally, we can compute the loss and update the model. Call it phase 4.
-        
-        
-        """
+        action_embedding = model.embeddings(model.vocab.action_indices[action])  # [1, 64]
+        action_embedding = action_embedding.unsqueeze(1)  # [1, 1, 64]
+        memory.actions.append(action_embedding)
+
+        next_state_key = model.vocab["next_state_key"]  # [64,]
+        next_state_key = next_state_key.unsqueeze(0).unsqueeze(0)  # [1, 1, 64]
+
+        action_key = model.vocab["action_key"]  # [64,]
+        action_key = action_key.view(1, 1, -1)  # [1, 1, 64]
+
+        next_latent_obs_key = model.vocab["next_latent_obs_key"]  # [64,]
+        next_latent_obs_key = next_latent_obs_key.view(1, 1, -1)  # [1, 1, 64]
+
+        # -------------- Predict next state -------------
+
+        with torch.no_grad():
+            seq_forward_dynamics = torch.cat([
+                next_state_key,
+                obs_embeddings,
+                action_key,
+                action_embedding,
+                next_state_key,
+            ], dim=1)  # [1, 76, 64]
+            # Iterate forward with KV caching until len(obs_next_embeddings) are predicted.
+            for j in range(obs_next_embeddings.shape[1]):
+                outputs = model.transformer(seq_forward_dynamics)  # [1, 76, 64]
+                next_obs_embedding = outputs[:, -1:]  # [1, 1, 64]
+                seq_forward_dynamics = torch.cat([seq_forward_dynamics, next_obs_embedding], dim=1)  # [1, 77, 64]
+
+        obs_next_pred = seq_forward_dynamics[:, -obs_next_embeddings.shape[1]:]  # [1, 37, 64]
+
+        # -------------- BERT & latent obs -------------
+        model.train()
+        seq_obs1 = torch.cat([
+            next_state_key,
+            obs_embeddings,
+        ], dim=1)  # [1, 38, 64]
+        seq_obs2 = torch.cat([
+            next_state_key,
+            obs_next_embeddings,
+        ], dim=1)  # [1, 38, 64]
+        batch_bert = torch.cat([seq_obs1, seq_obs2], dim=0)  # [2, 38, 64]
+        # TODO: Create BERT mask
+        bert_out = model.transformer(batch_bert)  # [2, 38, 64]
+        obs1_latent = bert_out[:1, :1]  # [1, 1, 64]
+        obs2_latent = bert_out[1:, :1]  # [1, 1, 64]
+
+        # -------------- Predict next latent obs ------------
+        seq_forward_dynamics = torch.cat([
+            next_latent_obs_key,
+            obs1_latent,
+            action_key,
+            action_embedding,
+            next_latent_obs_key,
+            obs2_latent,
+        ], dim=1)  # [1, 76, 64]
+        seq_inverse_dynamics = torch.cat([
+            next_latent_obs_key,
+            obs1_latent,
+            next_latent_obs_key,
+            obs2_latent,
+            action_key,
+            action_embedding,
+        ], dim=1)
+        batch_latent = torch.cat([seq_forward_dynamics, seq_inverse_dynamics], dim=0)  # [2, 76, 64]
+        # TODO: Create mask
+        latent_out = model.transformer(batch_latent)  # [2, 76, 64]
+
+        action_embedding_pred = latent_out[1:, -1:]  # [1, 1, 64]
+        action_logits = model.classifier(action_embedding_pred)  # [1, n_classes]
+        action_logits = action_logits[:, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
+        action_logits = torch.softmax(action_logits, dim=-1)  # [1, n_actions]
+
+        obs2_latent_pred = latent_out[:1, -1:]  # [1, 1, 64]
+
+        loss_latent = F.mse_loss(obs2_latent_pred, obs2_latent)
+        loss_action = F.cross_entropy(action_logits, action)
+
+        # --------------- Compute reward --------------
+        reward_full_state = F.mse_loss(obs_next_pred, obs_next_embeddings)
+        reward_latent = loss_latent.detach()
+
+        # --------------- Training -----------------
+
+        seq_forward_dynamics = torch.cat([
+            next_state_key,
+            obs_embeddings,
+            action_key,
+            action_embedding,
+            next_state_key,
+            obs_next_embeddings,
+        ], dim=1)  # [1, 76, 64]
+        # TODO: Create mask
+
+        seq_inverse_dynamics = torch.cat([
+            next_state_key,
+            obs_embeddings,
+            next_state_key,
+            obs_next_embeddings,
+            action_key,
+            action_embedding,
+        ], dim=1)  # [1, 76, 64]
+        # TODO: Create mask
+
+
+
+
 
 
 

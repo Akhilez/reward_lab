@@ -1,9 +1,10 @@
 """
 - There are n_actions discrete actions.
 - State, time emb and reward emb are continuous, so no vocab.
-- n_special=6 special tokens for:
+- n_special=7 special tokens for:
     - action
     - next_state
+    - next_latent_obs
     - reward
     - think_start
     - think_end
@@ -24,6 +25,7 @@ class Vocabulary:
         self.special_tokens = [
             "action_key",
             "next_state_key",
+            "next_latent_obs_key",
             "reward_key",
             "think_start",
             "think_end",
