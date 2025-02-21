@@ -32,9 +32,12 @@ from evo_devo_nano.model.model import CraftaxModel
 
 
 def do_it_again():
+    temperature = 100  # lower temperature means more greedy sampling
+
     interaction = Interaction()
     memory = Memory(5)
     model = CraftaxModel(h=interaction.h, w=interaction.w, n_actions=interaction.n_actions)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
     # ----------------- Recon obs backprop -----------------
     model.train()
@@ -42,7 +45,11 @@ def do_it_again():
     obs = obs.permute(2, 0, 1).unsqueeze(0)  # [1, 3, 64, 64]
     obs_embeddings, reconstruction = model.obs_encoder(obs, return_reconstruction=True)  # [1, 36, 64], [1, 3, 64, 64]
     loss_recon = F.mse_loss(reconstruction, obs)
-    # TODO: backprop
+
+    # Backprop
+    optimizer.zero_grad()
+    loss_recon.backward()
+    optimizer.step()
 
     obs_embeddings = obs_embeddings.detach()
     # prefix = model.vocab["next_state_key"]  # [64,]
@@ -52,32 +59,29 @@ def do_it_again():
 
     memory.observations.append(obs_embeddings)
 
-    for i in range(1):
-        with torch.no_grad():
-            obs_embeddings = memory.observations[-1]  # [1, 37, 64]
-            action_key = model.vocab["action_key"]  # int
-            action_key = model.embeddings(torch.tensor(action_key).unsqueeze(0))  # [1, 64]
-            inputs = torch.cat([obs_embeddings, action_key.view(1, 1, -1)], dim=1)  # [1, 38, 64]
+    for i in range(10):
+        obs_embeddings = memory.observations[-1]  # [1, 37, 64]
+        action_key = model.vocab["action_key"]  # int
+        action_key = model.embeddings(torch.tensor(action_key).unsqueeze(0))  # [1, 64]
+        inputs = torch.cat([obs_embeddings, action_key.view(1, 1, -1)], dim=1)  # [1, 38, 64]
 
-            # ----------------- Predict action -----------------
-            model.transformer.eval()
-            output_embeddings = model.transformer(inputs)  # [1, 38, 64]
-            action_logits = model.classifier(output_embeddings[:, -1, :])  # [1, n_classes]
-            action_logits = action_logits[:, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
-            action_logits = torch.softmax(action_logits, dim=-1)
-            action = torch.multinomial(action_logits, num_samples=1)[0]  # [1]
+        # ----------------- Predict action -----------------
+        model.transformer.eval()
+        output_embeddings = model.transformer(inputs)  # [1, 38, 64]
+        action_logits = model.classifier(output_embeddings[:, -1, :])  # [1, n_classes]
+        action_logits = action_logits[:, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
+        action_logits = torch.softmax(action_logits / temperature, dim=-1)  # [1, n_actions]
+        action = torch.multinomial(action_logits, num_samples=1)[0]  # [1]
 
         # ------------ Step ---------------
         interaction.step(action[0].item())
 
 
-        # ---------------- Recon next obs backprop --------------------
+        # ---------------- Recon next obs --------------------
         model.train()
         obs_next = torch.tensor(interaction.obs)  # [64, 64, 3]
         obs_next = obs_next.permute(2, 0, 1).unsqueeze(0)  # [1, 3, 63, 63]
         obs_next_embeddings, reconstruction_next = model.obs_encoder(obs_next, return_reconstruction=True)
-        loss_recon = F.mse_loss(reconstruction_next, obs_next)
-        # TODO: backprop
 
         # -------------- Gather embeddings --------------
         obs_next_embeddings = obs_next_embeddings.detach()
@@ -141,7 +145,7 @@ def do_it_again():
             action_key,
             action_embedding,
             next_latent_obs_key,
-            obs2_latent,
+            # obs2_latent,
         ], dim=1)  # [1, 76, 64]
         seq_inverse_dynamics = torch.cat([
             next_latent_obs_key,
@@ -149,25 +153,24 @@ def do_it_again():
             next_latent_obs_key,
             obs2_latent,
             action_key,
-            action_embedding,
+            # action_embedding,
         ], dim=1)
         batch_latent = torch.cat([seq_forward_dynamics, seq_inverse_dynamics], dim=0)  # [2, 76, 64]
         # TODO: Create mask
         latent_out = model.transformer(batch_latent)  # [2, 76, 64]
 
         action_embedding_pred = latent_out[1:, -1:]  # [1, 1, 64]
-        action_logits = model.classifier(action_embedding_pred)  # [1, n_classes]
-        action_logits = action_logits[:, :, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
-        action_logits = torch.softmax(action_logits, dim=-1)  # [1, n_actions]
+        action_logits_latent = model.classifier(action_embedding_pred)  # [1, 1, n_classes]
+        action_logits_latent = action_logits_latent[:, :, torch.where(model.vocab.actions_mask)[0]]  # [1, 1, n_actions]
+        action_logits_latent = torch.softmax(action_logits_latent, dim=-1)  # [1, 1, n_actions]
 
         obs2_latent_pred = latent_out[:1, -1:]  # [1, 1, 64]
 
-        loss_latent = F.mse_loss(obs2_latent_pred, obs2_latent)
-        loss_action = F.cross_entropy(action_logits.squeeze(1), action)
+        loss_latent_obs = F.mse_loss(obs2_latent_pred, obs2_latent)
 
         # --------------- Compute reward --------------
         reward_full_state = F.mse_loss(obs_next_pred, obs_next_embeddings)
-        reward_latent = loss_latent.detach()
+        reward_latent = loss_latent_obs.detach()
 
         # --------------- Training -----------------
 
@@ -195,15 +198,51 @@ def do_it_again():
 
         outputs = model.transformer(batch)  # [2, 76, 64]
 
+        # TODO: Predict reward
+
         # -------------- Losses -------------
 
+        loss_recon = F.mse_loss(reconstruction_next, obs_next)
+        loss_action_latent = F.cross_entropy(action_logits_latent.squeeze(1), action)
+        # loss_latent_obs
 
+        obs2_emb_with_grad = outputs[0, -obs_next_embeddings.shape[1]:]  # [1, 37, 64]
+        loss_forward_dynamics = F.mse_loss(obs2_emb_with_grad, obs_next_embeddings)
 
+        action_pred_with_grad = outputs[1, -1:]  # [1, 64]
+        action_logits_pred = model.classifier(action_pred_with_grad)  # [1, n_classes]
+        action_logits_pred = action_logits_pred[:, torch.where(model.vocab.actions_mask)[0]]  # [1, n_actions]
+        action_logits_pred = torch.softmax(action_logits_pred, dim=-1)  # [1, n_actions]
+        loss_inverse_dynamics = F.cross_entropy(action_logits_pred, action)
 
+        # Loss for action prediction
+        # - log(action_logits[action]) * reward
+        loss_policy = -torch.log(action_logits[:, action]) * (reward_full_state + reward_latent)
+        loss_policy = loss_policy.mean()
 
+        loss = loss_recon + loss_forward_dynamics + loss_inverse_dynamics + loss_action_latent + loss_policy + loss_latent_obs
 
+        print({
+            "action": action,
+            "action_greedy": action_logits.argmax(-1),
+            "action_pred_latent": action_logits_latent.argmax(-1),
+            "action_logits": action_logits,
+            "action_logits_latent": action_logits_latent,
+            "reward_full_state": reward_full_state,
+            "reward_latent": reward_latent,
+            "loss_recon": loss_recon,
+            "loss_forward_dynamics": loss_forward_dynamics,
+            "loss_inverse_dynamics": loss_inverse_dynamics,
+            "loss_action_latent": loss_action_latent,
+            "loss_policy": loss_policy,
+            "loss_latent_obs": loss_latent_obs,
+            "loss": loss,
+        })
 
-
+        # Backprop
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
 
 

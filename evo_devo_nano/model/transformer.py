@@ -28,20 +28,7 @@ class Attention(nn.Module):
         self.qkv = nn.Linear(self.dim, self.dim * 3, bias=False)
         self.out = nn.Linear(self.dim, self.dim)
 
-    def forward(self, x, freqs_cis):
-        """
-        Perform a forward pass through the Attention layer.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-            start_pos (int): Starting position for attention caching.
-            freqs_cis (torch.Tensor): Precomputed cosine and sine frequencies.
-            mask (torch.Tensor, optional): Masking tensor for attention. Defaults to None.
-
-        Returns:
-            torch.Tensor: Output tensor after applying attention.
-
-        """
+    def forward(self, x, freqs_cis, is_causal: bool = True):
         B, T, C = x.shape
         qkv = self.qkv(x).reshape(B, T, 3, self.n_heads, self.head_dim).permute(2, 0, 3, 1, 4)  # 3 x b x nh x l x hd
         q, k, v = qkv[0], qkv[1], qkv[2]  # b x nh x l x hd
@@ -49,7 +36,7 @@ class Attention(nn.Module):
         q = apply_rotary_emb(q, freqs_cis)  # b x nh x l x hd
         k = apply_rotary_emb(k, freqs_cis)  # b x nh x l x hd
 
-        attention = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout, is_causal=True)  # b x nh x l x hd
+        attention = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout, is_causal=is_causal)  # b x nh x l x hd
         out = attention.transpose(1, 2).reshape(B, T, C)  # b x l x d
         return self.out(out)
 
@@ -72,8 +59,8 @@ class TransformerBlock(nn.Module):
         self.attention_norm = nn.RMSNorm(dim, eps=norm_eps)
         self.ffn_norm = nn.RMSNorm(dim, eps=norm_eps)
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor):
-        h = x + self.attention(self.attention_norm(x), freqs_cis)
+    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, is_causal: bool = True):
+        h = x + self.attention(self.attention_norm(x), freqs_cis, is_causal)
         out = h + self.feed_forward(self.ffn_norm(h))
         return out
 
@@ -95,13 +82,13 @@ class VanillaTransformer(nn.Module):
 
         self.freqs_cis = precompute_freqs_cis(self.head_dim, max_len * 2)
 
-    def forward(self, in_embeddings):
+    def forward(self, in_embeddings, is_causal=True):
         # in_embeddings: (b, l, d)
         b, l, d = in_embeddings.shape
         freq_cis = self.freqs_cis[:l]
         x = in_embeddings
         for layer in self.layers:
-            x = layer(x, freq_cis)
+            x = layer(x, freq_cis, is_causal)
         return self.output_norm(x)
 
 
