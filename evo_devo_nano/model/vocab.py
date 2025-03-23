@@ -30,6 +30,7 @@ class Vocabulary:
             "think_start",
             "think_end",
             "done",
+            "value_key",
         ]
 
         self.n_special = len(self.special_tokens)

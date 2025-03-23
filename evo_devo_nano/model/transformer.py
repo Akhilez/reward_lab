@@ -81,6 +81,7 @@ class VanillaTransformer(nn.Module):
         self.output_norm = nn.RMSNorm(embed_dim, eps=1e-6)
 
         self.freqs_cis = precompute_freqs_cis(self.head_dim, max_len * 2)
+        self.freqs_cis = nn.Parameter(self.freqs_cis, requires_grad=False)
 
     def forward(self, in_embeddings, is_causal=True):
         # in_embeddings: (b, l, d)

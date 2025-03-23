@@ -10,11 +10,11 @@ class CraftaxModel(nn.Module):
         super(CraftaxModel, self).__init__()
         self.n_actions = n_actions
 
-        self.embed_dim = 256
+        self.embed_dim = 64
         self.max_time_steps = 1000
         self.n_heads = 4
         self.n_layers = 6
-        self.max_seq_len = 1024
+        self.max_seq_len = 256
         self.n_thinking_tokens = 100
 
         self.vocab = Vocabulary(n_actions=self.n_actions, n_thinking=self.n_thinking_tokens)
@@ -28,7 +28,8 @@ class CraftaxModel(nn.Module):
             max_len=self.max_seq_len,
         )
         self.classifier = nn.Linear(self.embed_dim, self.vocab.size, bias=False)
-        # self.classifier.weight = self.embeddings.weight
+        self.classifier.weight = self.embeddings.weight
+        self.critic = nn.Linear(self.embed_dim, 1)
 
     def forward(self, x):
         pass

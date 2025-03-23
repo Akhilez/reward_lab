@@ -28,13 +28,19 @@ class TimeStepEncoder(nn.Module):
         self.max_time_steps = max_time_steps
 
         self.time_embeddings = positional_encoding_1d(embed_dim, max_time_steps)
+        self.time_embeddings = nn.Parameter(self.time_embeddings, requires_grad=False)
 
-    def forward(self, embeddings, timestep: int):
-        time_embeddings = self.time_embeddings[timestep]  # (1, embed_dim)
-        time_embeddings = time_embeddings.unsqueeze(0).expand(embeddings.shape[0], -1, -1)  # (B, 1, embed_dim)
+    def forward(self, embeddings, time_steps):
+        # embeddings: (B, T, embed_dim)
+        # time_steps: (B,)
+
+        assert len(embeddings) == len(time_steps)
+
+        time_embeddings = self.time_embeddings[time_steps]  # (B, embed_dim)
+        time_embeddings = time_embeddings.unsqueeze(1)  # (B, 1, embed_dim)
 
         # concatenate time embeddings to obs
-        embeddings = torch.cat([embeddings, time_embeddings], dim=1)
+        embeddings = torch.cat([embeddings, time_embeddings], dim=1)  # (B, T + 1, embed_dim)
         return embeddings
 
     @staticmethod
@@ -119,57 +125,7 @@ class ObsEncoder(nn.Module):
             nn.Sigmoid(),
         )
 
-        # # Single conv layers
-        # self.encoder = nn.Conv2d(
-        #     in_channels,
-        #     embed_dim,
-        #     kernel_size=self.scale_factor * 2,
-        #     stride=self.scale_factor,
-        #     padding=0,  # self.scale_factor // 2,
-        # )  # hxw -> h/4 x w/4
-        #
-        # self.decoder = nn.Sequential(
-        #     nn.SiLU(),
-        #     nn.ConvTranspose2d(
-        #         embed_dim,
-        #         in_channels,
-        #         kernel_size=self.scale_factor * 2,
-        #         stride=self.scale_factor,
-        #         padding=0,  # self.scale_factor // 2,
-        #         output_padding=output_padding,
-        #     ),  # h/4 x w/4 -> h x w
-        #     nn.Sigmoid(),
-        # )
-
-        # # 2 conv layers
-        # self.encoder = nn.Sequential(
-        #     nn.Conv2d(in_channels, embed_dim, kernel_size=self.scale_factor, stride=self.scale_factor, padding=0),  # hxw -> h/4 x w/4
-        #     nn.SiLU(),
-        #     nn.Conv2d(embed_dim, embed_dim, kernel_size=self.scale_factor, stride=self.scale_factor, padding=0),  # h/4 x w/4 -> h/16 x w/16
-        # )
-        # self.decoder = nn.Sequential(
-        #     nn.SiLU(),
-        #     nn.ConvTranspose2d(
-        #         embed_dim,
-        #         embed_dim,
-        #         kernel_size=self.scale_factor,
-        #         stride=self.scale_factor,
-        #         padding=0,  # self.scale_factor // 2,
-        #         output_padding=output_padding,
-        #     ),  # h/16 x w/16 -> h/4 x w/4
-        #     nn.SiLU(),
-        #     nn.ConvTranspose2d(
-        #         embed_dim,
-        #         in_channels,
-        #         kernel_size=self.scale_factor,
-        #         stride=self.scale_factor,
-        #         padding=0,  # self.scale_factor // 2,
-        #         output_padding=output_padding,
-        #     ),  # h/4 x w/4 -> h x w
-        #     nn.Sigmoid(),
-        # )
-
-    def forward(self, x, return_reconstruction=True):
+    def forward(self, x, return_reconstruction=False):
         y = self.encoder(x)  # (B, embed_dim, h/scale, w/scale)
         embeddings = y.flatten(2).transpose(1, 2)  # (B, H*W, embed_dim)
 
