@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import math
+
 import torch
+from einops import repeat
 from functorch.einops import rearrange
 from torch import nn
 
@@ -76,7 +79,7 @@ class AttentionLayer(nn.Module):
         normed = self.norm(embeddings)  # [B, T, D]
         qkv = self.qkv(normed)  # [B, T, D*3]
         q, k, v = qkv.chunk(3, dim=-1)  # 3 * [B, T, D]
-        attention = self.mha(q, k, v, key_padding_mask=padding_mask, attn_mask=attention_mask, need_weights=False)
+        attention, _ = self.mha(q, k, v, key_padding_mask=padding_mask, attn_mask=attention_mask, need_weights=False)
         return embeddings + self.dropout(attention)  # [B, T, D]
 
 
@@ -87,14 +90,12 @@ class TemporalTransformerBlock(nn.Module):
         hidden_size: int,
         num_heads: int,
         dropout: float,
-        max_temporal_sequence_length: int,
     ):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.dropout = dropout
-        self.max_temporal_sequence_length = max_temporal_sequence_length
 
         self.state_attention = AttentionLayer(embedding_dim, num_heads, dropout)
         self.temporal_attention = AttentionLayer(embedding_dim, num_heads, dropout)
@@ -134,6 +135,7 @@ class TemporalTransformerBlock(nn.Module):
         out_state = self.state_attention(rearranged, state_padding_mask)  # [(B, T+1), S, D]
 
         rearranged = rearrange(out_state, "(B T) S D -> (B S) T D", B=B)  # [B*S, T+1, D]
+        temporal_padding_mask = repeat(temporal_padding_mask, "B T -> (B S) T", S=S)
         out_temporal = self.temporal_attention(rearranged, temporal_padding_mask, temporal_attention_mask)
         out_temporal = rearrange(out_temporal, "(B S) T D -> B T S D", B=B)  # [B, T, S, D]
 
@@ -169,7 +171,6 @@ class TransformerModel(nn.Module):
                     self.hidden_size,
                     self.num_heads,
                     self.dropout,
-                    self.max_temporal_sequence_length,
                 )
                 for _ in range(num_layers)
             ]
@@ -184,6 +185,29 @@ class TransformerModel(nn.Module):
         self.padding_id = self.vocab.s2i["padding"]
         self.action_taken_id = self.vocab.s2i["action_taken"]
         self.next_position_id = self.vocab.s2i["next_position"]
+
+        # Sinusoidal table for positions [0, max_T). Non-persistent: derived, so kept out of state_dict.
+        self.register_buffer(
+            "temporal_encodings",
+            self.build_sinusoidal_encodings(self.max_temporal_sequence_length, self.embedding_dim),
+            persistent=False,
+        )  # (max_T, D)
+
+    @staticmethod
+    def build_sinusoidal_encodings(length: int, dim: int) -> torch.Tensor:
+        """
+        Returns: [length, dim], row p is the sinusoidal encoding of position p.
+        """
+        positions = torch.arange(length, dtype=torch.float32)  # (L,)
+        half = (dim + 1) // 2
+        # exp(log(10000) * [0-D/2] * 2 / D)
+        freqs = torch.exp(-math.log(10000.0) * torch.arange(half, dtype=torch.float32) * 2 / dim)  # (ceil(D/2),)
+        angles = positions[:, None] * freqs[None, :]  # (L, ceil(D/2))
+
+        encodings = torch.zeros(length, dim)  # (L, D)
+        encodings[:, 0::2] = torch.sin(angles)
+        encodings[:, 1::2] = torch.cos(angles[:, : dim // 2])
+        return encodings
 
     def forward(self, context_tokens: torch.Tensor, prompt_tokens: torch.Tensor):
         """
@@ -228,14 +252,15 @@ class TransformerModel(nn.Module):
 
         embeddings = self.join_embeddings(embeddings_context, embeddings_prompt)  # (B, T+1, S, D)
 
-        state_padding_mask, temporal_padding_mask = self.get_state_padding_mask(context_tokens, prompt_tokens)  # (B, T+1, S), (B, T+1)
-        temporal_attention_mask = self.get_temporal_attention_mask(t + 1)  # (T+1, T+1)
+        state_padding_mask, temporal_padding_mask = self.get_padding_masks(context_tokens, prompt_tokens)  # (B, T+1, S), (B, T+1)
+        temporal_attention_mask = self.get_temporal_attention_mask(t + 1, device=embeddings.device)  # (T+1, T+1)
 
         for block in self.transformer_blocks:
             embeddings = block(embeddings, state_padding_mask, temporal_padding_mask, temporal_attention_mask)
         embeddings = self.final_norm(embeddings)
 
-    def get_temporal_attention_mask(self, sequence_length: int) -> torch.Tensor:
+
+    def get_temporal_attention_mask(self, sequence_length: int, device: torch.device) -> torch.Tensor:
         """
         sequence_length: T+1, int
         Returns: [T+1, T+1]
@@ -243,6 +268,11 @@ class TransformerModel(nn.Module):
         The first T attend only to themselves.
         The last attends to all.
         """
+        # True where attention is NOT allowed (nn.MultiheadAttention bool attn_mask convention).
+        mask = torch.zeros((sequence_length, sequence_length), dtype=torch.bool, device=device)
+        mask[:-1, -1] = True  # Block the last column for all rows except the last
+        print(mask)
+        return mask
 
     def add_temporal_encodings(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
@@ -256,6 +286,12 @@ class TransformerModel(nn.Module):
         Rearrange it to [1, T, 1, D]
         Add to the embeddings and return
         """
+        t = embeddings.shape[1]
+        assert t <= self.max_temporal_sequence_length, f"T={t} > max_temporal_sequence_length"
+        encodings = self.temporal_encodings[:t].flip(0)  # (T, D), positions [T-1, ..., 0]
+
+        encodings = rearrange(encodings, "T D -> 1 T 1 D").to(embeddings.dtype)  # (1, T, 1, D)
+        return embeddings + encodings  # (B, T, S, D)
 
     def join_embeddings(self, embeddings_context: torch.Tensor, embeddings_prompt: torch.Tensor) -> torch.Tensor:
         """
@@ -354,10 +390,10 @@ class TransformerModel(nn.Module):
         tokens_prompt = rearrange(tokens_prompt, "B S -> B 1 S")
         tokens = torch.cat([tokens_context, tokens_prompt], dim=1)  # (B, T+1, S)
 
-        state_padding_mask = tokens != self.padding_id
+        state_padding_mask = tokens == self.padding_id
 
         temporal_tokens = tokens[:, :, 0]  # [B, T+1]
-        temporal_padding_mask = temporal_tokens != self.padding_id
+        temporal_padding_mask = temporal_tokens == self.padding_id
 
         return state_padding_mask, temporal_padding_mask
 
@@ -370,6 +406,7 @@ def try_vocab():
 
 def try_model():
     vocab = Vocab()
+    device = "mps"
 
     board0 = [vocab.s2i["empty_pawn"]] * 24
 
@@ -437,8 +474,8 @@ def try_model():
     print(prompt_tokens)
     print(vocab.names(prompt_tokens))
 
-    context_tokens_tensor = torch.tensor(context_tokens).unsqueeze(0)  # (1, T, S)
-    prompt_tokens_tensor = torch.tensor(prompt_tokens).unsqueeze(0)  # (1, O)
+    context_tokens_tensor = torch.tensor(context_tokens).unsqueeze(0).to(device)  # (1, T, S)
+    prompt_tokens_tensor = torch.tensor(prompt_tokens).unsqueeze(0).to(device)  # (1, O)
 
     print(context_tokens_tensor.shape)
     print(prompt_tokens_tensor.shape)
@@ -450,7 +487,7 @@ def try_model():
         num_heads=4,
         dropout=0.1,
         max_temporal_sequence_length=4,
-    )
+    ).to(device)
 
     model(context_tokens_tensor, prompt_tokens_tensor)
 
