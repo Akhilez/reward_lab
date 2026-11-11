@@ -24,6 +24,8 @@ class Vocab:
             "next_action_type": ["next_action_type"],
             "next_kill_count_player": ["next_kill_count_player"],
             "next_kill_count_opponent": ["next_kill_count_opponent"],
+            "pred_reward": ["pred_reward"],
+            "rewards": ["reward_won", "reward_lost", "reward_killed_opponent", "reward_got_killed"]
         }
 
         self.i2s = [s for k, names in self.vocab_names.items() for s in self.vocab_names[k]]
@@ -109,14 +111,12 @@ class TemporalTransformerBlock(nn.Module):
         self,
         embeddings: torch.Tensor,
         state_padding_mask: torch.Tensor,
-        state_attention_mask: torch.Tensor,
         temporal_padding_mask: torch.Tensor,
         temporal_attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         """
         embeddings_context: [B, T+1, S, D]
         state_padding_mask: [B, T+1, S]. True where the element is padded.
-        state_attention_mask: [S, S]. True where the element is not allowed.
         temporal_padding_mask: [B, T+1]. True where the element is padded.
         temporal_attention_mask: [T+1, T+1]. True where attention is not allowed.
 
@@ -131,7 +131,7 @@ class TemporalTransformerBlock(nn.Module):
 
         rearranged = rearrange(embeddings, "B T S D -> (B T) S D")  # [(B T+1) S D]
         state_padding_mask = rearrange(state_padding_mask, "B T S -> (B T) S")
-        out_state = self.state_attention(rearranged, state_padding_mask, state_attention_mask)  # [(B, T+1), S, D]
+        out_state = self.state_attention(rearranged, state_padding_mask)  # [(B, T+1), S, D]
 
         rearranged = rearrange(out_state, "(B T) S D -> (B S) T D", B=B)  # [B*S, T+1, D]
         out_temporal = self.temporal_attention(rearranged, temporal_padding_mask, temporal_attention_mask)
@@ -229,18 +229,20 @@ class TransformerModel(nn.Module):
         embeddings = self.join_embeddings(embeddings_context, embeddings_prompt)  # (B, T+1, S, D)
 
         state_padding_mask, temporal_padding_mask = self.get_state_padding_mask(context_tokens, prompt_tokens)  # (B, T+1, S), (B, T+1)
-        state_attention_mask = self.get_state_attention_mask(s)  # (s, s)
         temporal_attention_mask = self.get_temporal_attention_mask(t + 1)  # (T+1, T+1)
 
         for block in self.transformer_blocks:
-            embeddings = block(embeddings, state_padding_mask, state_attention_mask, temporal_padding_mask, temporal_attention_mask)
+            embeddings = block(embeddings, state_padding_mask, temporal_padding_mask, temporal_attention_mask)
         embeddings = self.final_norm(embeddings)
 
-    def get_state_attention_mask(self, sequence_length: int) -> torch.Tensor:
-        pass
-
     def get_temporal_attention_mask(self, sequence_length: int) -> torch.Tensor:
-        pass
+        """
+        sequence_length: T+1, int
+        Returns: [T+1, T+1]
+
+        The first T attend only to themselves.
+        The last attends to all.
+        """
 
     def add_temporal_encodings(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
@@ -427,7 +429,7 @@ def try_model():
                 "next_kill_count_player",
                 "next_kill_count_opponent",
                 "next_player",
-                "padding",
+                "pred_reward",
             ]
         )
         + position_tokens
