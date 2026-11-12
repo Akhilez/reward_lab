@@ -28,7 +28,7 @@ class Vocab:
             "next_kill_count_player": ["next_kill_count_player"],
             "next_kill_count_opponent": ["next_kill_count_opponent"],
             "pred_reward": ["pred_reward"],
-            "rewards": ["reward_won", "reward_lost", "reward_killed_opponent", "reward_got_killed"]
+            "rewards": ["reward_won", "reward_lost", "reward_killed_opponent", "reward_got_killed"],
         }
 
         self.i2s = [s for k, names in self.vocab_names.items() for s in self.vocab_names[k]]
@@ -108,18 +108,12 @@ class TemporalTransformerBlock(nn.Module):
             nn.Dropout(dropout),
         )
 
-    def forward(
-        self,
-        embeddings: torch.Tensor,
-        state_padding_mask: torch.Tensor,
-        temporal_padding_mask: torch.Tensor,
-        temporal_attention_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, embeddings: torch.Tensor, temporal_padding_mask: torch.Tensor) -> torch.Tensor:
         """
-        embeddings_context: [B, T+1, S, D]
-        state_padding_mask: [B, T+1, S]. True where the element is padded.
-        temporal_padding_mask: [B, T+1]. True where the element is padded.
-        temporal_attention_mask: [T+1, T+1]. True where attention is not allowed.
+        embeddings_context: [B, T, S, D]
+        state_padding_mask: [B, T, S]. True where the element is padded.
+        temporal_padding_mask: [B, T]. True where the element is padded.
+        temporal_attention_mask: [T, T]. True where attention is not allowed.
 
         - Rearrange the inputs to work with the state attention layer.
         - Forward the state attention layer.
@@ -130,13 +124,12 @@ class TemporalTransformerBlock(nn.Module):
         """
         B, _, S, D = embeddings.shape
 
-        rearranged = rearrange(embeddings, "B T S D -> (B T) S D")  # [(B T+1) S D]
-        state_padding_mask = rearrange(state_padding_mask, "B T S -> (B T) S")
-        out_state = self.state_attention(rearranged, state_padding_mask)  # [(B, T+1), S, D]
+        rearranged = rearrange(embeddings, "B T S D -> (B T) S D")  # [(B T) S D]
+        out_state = self.state_attention(rearranged)  # [(B, T), S, D]
 
-        rearranged = rearrange(out_state, "(B T) S D -> (B S) T D", B=B)  # [B*S, T+1, D]
+        rearranged = rearrange(out_state, "(B T) S D -> (B S) T D", B=B)  # [B*S, T, D]
         temporal_padding_mask = repeat(temporal_padding_mask, "B T -> (B S) T", S=S)
-        out_temporal = self.temporal_attention(rearranged, temporal_padding_mask, temporal_attention_mask)
+        out_temporal = self.temporal_attention(rearranged, temporal_padding_mask)  # [B*S, T, D]
         out_temporal = rearrange(out_temporal, "(B S) T D -> B T S D", B=B)  # [B, T, S, D]
 
         out_feed_forward = self.feed_forward(out_temporal)  # [B, T, S, D]
@@ -177,6 +170,16 @@ class TransformerModel(nn.Module):
         )
         self.final_norm = nn.LayerNorm(embedding_dim)
 
+        self.action_head = nn.Linear(embedding_dim, 24)
+
+        self.next_phase_head = nn.Linear(embedding_dim, 2)
+        self.next_action_type_head = nn.Linear(embedding_dim, 4)
+        self.next_kill_count_player_head = nn.Linear(embedding_dim, 8)
+        self.next_kill_count_opponent_head = nn.Linear(embedding_dim, 8)
+        self.next_player_head = nn.Linear(embedding_dim, 2)
+        self.reward_head = nn.Linear(embedding_dim, 1)
+        self.next_board_head = nn.Linear(embedding_dim, 4)
+
         # Contiguous id ranges (vocab groups are laid out contiguously in i2s).
         pawn_ids = self.vocab.ids("pawns")
         self.pawn_lo, self.pawn_hi = min(pawn_ids), max(pawn_ids)
@@ -185,6 +188,7 @@ class TransformerModel(nn.Module):
         self.padding_id = self.vocab.s2i["padding"]
         self.action_taken_id = self.vocab.s2i["action_taken"]
         self.next_position_id = self.vocab.s2i["next_position"]
+        self.pred_action_id = self.vocab.s2i["pred_action"]
 
         # Sinusoidal table for positions [0, max_T). Non-persistent: derived, so kept out of state_dict.
         self.register_buffer(
@@ -192,6 +196,86 @@ class TransformerModel(nn.Module):
             self.build_sinusoidal_encodings(self.max_temporal_sequence_length, self.embedding_dim),
             persistent=False,
         )  # (max_T, D)
+
+    def forward(self, context_tokens: torch.Tensor) -> dict[str, torch.Tensor]:
+        """
+        context_tokens: [B, T, S], int in [0, vocab_size]
+
+        B: Batch size
+        T: Temporal sequence length
+        S: State tokens length: 30.
+            24 (positons of pawns)
+            + 1 (phase)
+            + 1 (action_type)
+            + 2 (kills)
+            + 1 (player)
+            + 1 (action_taken or pred_action in the last state)
+        D: Embedding dim
+
+        - Pawn tokens get added with positional embeddings.
+        - Action location gets added with action_taken embedding.
+        - Context tokens attend to themselves only.
+        - Prompt tokens attend to all tokens.
+        """
+        b, t, s = context_tokens.shape
+        device = context_tokens.device
+
+        embeddings_context = self.embeddings(context_tokens)  # (B, T, S, D)
+        embeddings_context = self.add_pawn_encodings(embeddings_context, context_tokens)  # (B, T, S, D)
+        embeddings_context = self.add_action_taken_encodings(embeddings_context, context_tokens)  # (B, T, S, D)
+        embeddings_context = self.add_temporal_encodings(embeddings_context)  # (B, T, S, D)
+
+        has_action_taken = self._check_if_action_taken(context_tokens)
+        if has_action_taken:
+            # Setup prompt tokens
+            prompt_tokens = self.get_prompt_tokens(b, device)  # (B, S), int in [0, vocab_size]
+            assert prompt_tokens.shape == (b, s)
+
+            embeddings_prompt = self.embeddings(prompt_tokens)  # (B, S, D)
+            embeddings_prompt = self.add_next_position_encodings(embeddings_prompt, prompt_tokens)  # (B, S, D)
+
+            embeddings = self.join_embeddings(embeddings_context, embeddings_prompt)  # (B, T+1, S, D)
+        else:
+            embeddings = embeddings_context  # (B, T, S, D)
+
+        padding_mask = self.get_padding_mask(context_tokens, has_action_taken)  # (B, T')
+
+        for block in self.transformer_blocks:
+            embeddings = block(embeddings, padding_mask)  # (B, T', S, D)
+        embeddings = self.final_norm(embeddings)  # (B, T', S, D)
+
+        if has_action_taken:
+            next_phase = embeddings[:, t, 0]  # [B, D]
+            next_action_type = embeddings[:, t, 1]  # [B, D]
+            next_kill_count_player = embeddings[:, t, 2]  # [B, D]
+            next_kill_count_opponent = embeddings[:, t, 3]  # [B, D]
+            next_player = embeddings[:, t, 4]  # [B, D]
+            reward = embeddings[:, t, 5]  # [B, D]
+            next_board = embeddings[:, t, 6:]  # [B, 24, D]
+
+            out = {
+                "next_phase": self.next_phase_head(next_phase),  # [B, 2]
+                "next_action_type": self.next_action_type_head(next_action_type),  # [B, 4]
+                "next_kill_count_player": self.next_kill_count_player_head(next_kill_count_player),  # [B, 8]
+                "next_kill_count_opponent": self.next_kill_count_opponent_head(next_kill_count_opponent),  # [B, 8]
+                "next_player": self.next_player_head(next_player),  # [B, 2]
+                "pred_reward": self.reward_head(reward),  # [B, 1]
+                "next_board": self.next_board_head(next_board),  # [B, 24, 4]
+            }
+            return out
+        else:
+            # Get the last token's output embeddings for action prediction
+            action_embeddings = embeddings[:, -1, -1]  # [B, D]
+            return {"pred_action": self.action_head(action_embeddings)}  # [B, 24]
+
+    def _check_if_action_taken(self, context_tokens: torch.Tensor) -> bool:
+        # Figure out what to predict: action or next state
+        last_token = context_tokens[:, -1, -1]  # int
+        has_action_taken = last_token.ne(self.pred_action_id)  # If last token is "pred_action", no action taken yet.
+        # Make sure all true or all false.
+        assert has_action_taken.all() or not has_action_taken.any()
+        has_action_taken = bool(has_action_taken[0])
+        return has_action_taken
 
     @staticmethod
     def build_sinusoidal_encodings(length: int, dim: int) -> torch.Tensor:
@@ -208,71 +292,6 @@ class TransformerModel(nn.Module):
         encodings[:, 0::2] = torch.sin(angles)
         encodings[:, 1::2] = torch.cos(angles[:, : dim // 2])
         return encodings
-
-    def forward(self, context_tokens: torch.Tensor, prompt_tokens: torch.Tensor):
-        """
-        context_tokens: [B, T, S], int in [0, vocab_size]
-        prompt_tokens: [B, S], int in [0, vocab_size]
-
-        B: Batch size
-        T: Temporal sequence length
-        S: State tokens length: 30.
-            24 (positons of pawns)
-            + 1 (phase)
-            + 1 (action_type)
-            + 2 (kills)
-            + 1 (player)
-            + 1 (action_taken or padding in the last state)
-        D: Embedding dim
-
-        - Pawn tokens get added with positional embeddings.
-        - Action location gets added with action_taken embedding.
-        - Context tokens attend to themselves only.
-        - Prompt tokens attend to all tokens.
-
-        Steps:
-        - First get all the embeddings from tokens.
-        - Add all positional embeddings
-        - Add all action_taken embeddings
-        - Add all next_position embeddings
-        - Add temporal encodings
-        - Create a mask for padding
-        - Forward the transformer
-        - For the output prompt_tokens, forward to respective heads.
-        - Return the outputs of the final heads.
-        """
-        b, t, s = context_tokens.shape
-        embeddings_context = self.grab_embeddings(context_tokens)  # (B, T, S, D)
-        embeddings_prompt = self.grab_embeddings(prompt_tokens)  # (B, S, D)
-
-        embeddings_context = self.add_pawn_encodings(embeddings_context, context_tokens)  # (B, T, S, D)
-        embeddings_context = self.add_action_taken_encodings(embeddings_context, context_tokens)  # (B, T, S, D)
-        embeddings_context = self.add_temporal_encodings(embeddings_context)  # (B, T, S, D)
-        embeddings_prompt = self.add_next_position_encodings(embeddings_prompt, prompt_tokens)  # (B, S, D)
-
-        embeddings = self.join_embeddings(embeddings_context, embeddings_prompt)  # (B, T+1, S, D)
-
-        state_padding_mask, temporal_padding_mask = self.get_padding_masks(context_tokens, prompt_tokens)  # (B, T+1, S), (B, T+1)
-        temporal_attention_mask = self.get_temporal_attention_mask(t + 1, device=embeddings.device)  # (T+1, T+1)
-
-        for block in self.transformer_blocks:
-            embeddings = block(embeddings, state_padding_mask, temporal_padding_mask, temporal_attention_mask)
-        embeddings = self.final_norm(embeddings)
-
-
-    def get_temporal_attention_mask(self, sequence_length: int, device: torch.device) -> torch.Tensor:
-        """
-        sequence_length: T+1, int
-        Returns: [T+1, T+1]
-
-        The first T attend only to themselves.
-        The last attends to all.
-        """
-        # True where attention is NOT allowed (nn.MultiheadAttention bool attn_mask convention).
-        mask = torch.zeros((sequence_length, sequence_length), dtype=torch.bool, device=device)
-        mask[:-1, -1] = True  # Block the last column for all rows except the last
-        print(mask)
-        return mask
 
     def add_temporal_encodings(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
@@ -305,16 +324,6 @@ class TransformerModel(nn.Module):
         embeddings_prompt = rearrange(embeddings_prompt, "B S D -> B 1 S D")  # (B, 1, S, D)
         embeddings = torch.cat([embeddings_context, embeddings_prompt], dim=1)  # (B, T+1, S, D)
         return embeddings
-
-    def grab_embeddings(self, tokens: torch.Tensor) -> torch.Tensor:
-        """
-        tokens: [*, N], int in [0, vocab_size]
-        Returns: [*, N, D]
-
-        * can be any number of dimensions.
-        For each int index is replaced with it's embedding from an embedding layer.
-        """
-        return self.embeddings(tokens)  # (*, N, D)
 
     def add_pawn_encodings(self, embeddings: torch.Tensor, tokens: torch.Tensor) -> torch.Tensor:
         """
@@ -376,26 +385,39 @@ class TransformerModel(nn.Module):
 
         return embeddings + next_position_embedding  # (B, S, D)
 
-    def get_padding_masks(
-        self, tokens_context: torch.Tensor, tokens_prompt: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def get_padding_mask(self, tokens_context: torch.Tensor, has_prompt: bool) -> torch.Tensor:
         """
         tokens_context: [B, T, S]
-        tokens_prompt: [B, S]
+        has_prompt: bool
 
-        Returns: [B, T+1, S], [B, T+1]
+        Returns: [B, T']
 
-        Return a bool tensor with False where the token is padding from `vocab.vocab_names["padding"]`
+        Return a bool tensor with True where the fist token is padding from `vocab.vocab_names["padding"]`
         """
-        tokens_prompt = rearrange(tokens_prompt, "B S -> B 1 S")
-        tokens = torch.cat([tokens_context, tokens_prompt], dim=1)  # (B, T+1, S)
+        b, t, s = tokens_context.shape
+        t_updated = t + 1 if has_prompt else t
+        padding_mask = torch.zeros((b, t_updated), device=tokens_context.device, dtype=torch.bool)
+        first_tokens = tokens_context[:, :, 0]  # [B, T]
+        context_mask = first_tokens == self.padding_id  # [B, T]
+        padding_mask[:, :t] = context_mask
+        return padding_mask
 
-        state_padding_mask = tokens == self.padding_id
+    def get_prompt_tokens(self, batch_size: int, device: torch.device) -> torch.Tensor:
+        token_strs = [
+            "next_phase",
+            "next_action_type",
+            "next_kill_count_player",
+            "next_kill_count_opponent",
+            "next_player",
+            "pred_reward",
+        ]
+        token_strs += [f"position_{i}" for i in range(24)]
 
-        temporal_tokens = tokens[:, :, 0]  # [B, T+1]
-        temporal_padding_mask = temporal_tokens == self.padding_id
+        token_indices = self.vocab.ids(token_strs)
+        token_indices = torch.tensor(token_indices, device=device)  # (S,)
+        token_indices = repeat(token_indices, "s -> b s", b=batch_size)  # (B, S)
 
-        return state_padding_mask, temporal_padding_mask
+        return token_indices
 
 
 def try_vocab():
@@ -416,8 +438,6 @@ def try_model():
     board2 = board1.copy()
     board2[0] = vocab.s2i["player_pawn"]
     board2[1] = vocab.s2i["opponent_pawn"]
-
-    position_tokens = [vocab.s2i[f"position_{i}"] for i in range(24)]
 
     context_tokens = [
         board0
@@ -458,27 +478,9 @@ def try_model():
         print(context_tokens[t])
         print(vocab.names(context_tokens[t]))
 
-    prompt_tokens = (
-        vocab.ids(
-            [
-                "next_phase",
-                "next_action_type",
-                "next_kill_count_player",
-                "next_kill_count_opponent",
-                "next_player",
-                "pred_reward",
-            ]
-        )
-        + position_tokens
-    )
-    print(prompt_tokens)
-    print(vocab.names(prompt_tokens))
-
     context_tokens_tensor = torch.tensor(context_tokens).unsqueeze(0).to(device)  # (1, T, S)
-    prompt_tokens_tensor = torch.tensor(prompt_tokens).unsqueeze(0).to(device)  # (1, O)
-
-    print(context_tokens_tensor.shape)
-    print(prompt_tokens_tensor.shape)
+    context_tokens_tensor = repeat(context_tokens_tensor, "1 t s -> b t s", b=4)
+    print("context_tokens shape: ", context_tokens_tensor.shape)
 
     model = TransformerModel(
         embedding_dim=64,
@@ -489,7 +491,22 @@ def try_model():
         max_temporal_sequence_length=4,
     ).to(device)
 
-    model(context_tokens_tensor, prompt_tokens_tensor)
+    out = model(context_tokens_tensor)
+    for k, v in out.items():
+        print(k, v.shape)
+
+    context_tokens[-1][-1] = vocab.s2i["pred_action"]
+    context_tokens_tensor = torch.tensor(context_tokens).unsqueeze(0).to(device)  # (1, T, S)
+    context_tokens_tensor = repeat(context_tokens_tensor, "1 t s -> b t s", b=4)
+
+    for t in range(len(context_tokens)):
+        print(context_tokens[t])
+        print(vocab.names(context_tokens[t]))
+    print("context_tokens shape: ", context_tokens_tensor.shape)
+
+    out = model(context_tokens_tensor)
+    for k, v in out.items():
+        print(k, v.shape)
 
 
 if __name__ == "__main__":
